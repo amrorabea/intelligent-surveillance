@@ -5,9 +5,12 @@ import jwt
 from datetime import datetime, timedelta
 import secrets
 import os
+from helpers.config import get_settings
+
+settings = get_settings()
 
 # Security configuration
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
+SECRET_KEY = settings.JWT_SECRET_KEY
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 

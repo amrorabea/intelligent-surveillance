@@ -7,10 +7,15 @@ import time
 import logging
 import uuid
 from contextlib import asynccontextmanager
+import asyncio
 
 from routes import base, data, surveillance
 from models.database import db_manager
 from helpers.config import get_settings
+
+# Import AI controllers
+from controllers.VisionController import VisionController
+from controllers.VectorDBController import VectorDBController
 
 from dotenv import load_dotenv
 load_dotenv(".env")
@@ -22,27 +27,97 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Global AI model instances
+vision_controller = None
+vector_db_controller = None
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan management"""
+    global vision_controller, vector_db_controller
+    
     # Startup
-    logger.info("Starting Intelligent Surveillance System...")
+    logger.info("🚀 Starting Intelligent Surveillance System...")
     
     # Initialize database
     try:
         db_manager.create_tables()
-        logger.info("Database tables created/verified")
+        logger.info("✅ Database tables created/verified")
     except Exception as e:
-        logger.error(f"Failed to initialize database: {e}")
+        logger.error(f"❌ Failed to initialize database: {e}")
+        raise
     
-    # TODO: Initialize AI models here if you want them loaded at startup
-    # This could include loading YOLO and BLIP models
+    # Initialize AI models
+    logger.info("🧠 Initializing AI models...")
     
-    logger.info("Application startup complete")
+    try:
+        # Initialize Vision Controller (YOLOv8 + BLIP)
+        logger.info("📹 Loading computer vision models...")
+        vision_controller = VisionController(
+            detection_threshold=0.6,
+            max_detections=50
+        )
+        
+        # Test vision controller
+        model_info = vision_controller.get_model_info()
+        logger.info(f"✅ Vision Controller initialized - Models loaded: {model_info.get('models_loaded', False)}")
+        
+        # Initialize Vector Database Controller
+        logger.info("🔍 Initializing vector database...")
+        vector_db_controller = VectorDBController(
+            collection_name="surveillance_embeddings"
+        )
+        
+        # Test vector database
+        health = vector_db_controller.health_check()
+        logger.info(f"✅ Vector DB Controller initialized - Status: {health.get('status', 'unknown')}")
+        
+        # Store references in app state for access in routes
+        app.state.vision_controller = vision_controller
+        app.state.vector_db_controller = vector_db_controller
+        
+        logger.info("🎉 AI model initialization complete!")
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize AI models: {e}")
+        logger.warning("⚠️  Starting without AI capabilities - models will be loaded on-demand")
+        
+        # Initialize placeholder controllers for safe mode
+        app.state.vision_controller = None
+        app.state.vector_db_controller = None
+    
+    # Preload/warm up models (optional - for faster first requests)
+    try:
+        if vision_controller and vision_controller.models_loaded:
+            logger.info("🔥 Warming up AI models...")
+            await asyncio.get_event_loop().run_in_executor(
+                None, 
+                vision_controller.warmup_models
+            )
+            logger.info("✅ AI models warmed up")
+    except Exception as e:
+        logger.warning(f"⚠️  Model warmup failed: {e}")
+    
+    logger.info("✅ Application startup complete")
     yield
     
     # Shutdown
-    logger.info("Shutting down Intelligent Surveillance System...")
+    logger.info("🛑 Shutting down Intelligent Surveillance System...")
+    
+    # Cleanup AI models
+    try:
+        if vision_controller:
+            vision_controller.cleanup()
+            logger.info("✅ Vision models cleaned up")
+            
+        if vector_db_controller:
+            vector_db_controller.cleanup()
+            logger.info("✅ Vector database cleaned up")
+            
+    except Exception as e:
+        logger.error(f"❌ Error during AI cleanup: {e}")
+    
+    logger.info("✅ Shutdown complete")
 
 app = FastAPI(
     title="Intelligent Surveillance System",
