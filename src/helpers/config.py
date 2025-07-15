@@ -7,12 +7,15 @@ class Settings(BaseSettings):
 
     # File upload settings for surveillance files
     FILE_ALLOWED_TYPES: List[str] = [
-        "mp4", 
-        "avi", 
-        "quicktime",  # .mov files
-        "jpeg", 
-        "jpg", 
-        "png"
+        "video/mp4",
+        "video/avi", 
+        "video/x-msvideo",  # Alternative AVI MIME type
+        "video/quicktime",  # .mov files
+        "video/webm",
+        "video/mkv",
+        "image/jpeg", 
+        "image/jpg", 
+        "image/png"
     ]
     FILE_MAX_SIZE: int = 500  # MB - larger for video files
     FILE_DEFAULT_CHUNK_SIZE: int = 1048576  # 1MB chunks for upload
