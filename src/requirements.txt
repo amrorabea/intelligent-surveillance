@@ -1,2 +1,84 @@
+# Core FastAPI and server
 fastapi==0.115.9
 uvicorn==0.34.3
+python-dotenv==1.0.1
+pydantic==2.6.3
+pydantic-settings==2.2.1
+
+# Database and ORM
+sqlalchemy==2.0.29
+alembic==1.13.1
+
+# Background job processing
+celery==5.3.6
+redis==5.0.3
+
+# Authentication and security
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.9
+
+# File handling and utilities
+aiofiles==23.2.1
+pillow==10.3.0
+
+# Vector database
+chromadb==0.4.22
+
+# Monitoring and logging
+structlog==24.1.0
+
+# Development and testing
+pytest==8.1.1
+pytest-asyncio==0.23.5
+httpx==0.27.0
+
+# Production server
+gunicorn==21.2.0
+
+# System monitoring (optional)
+psutil==5.9.8
+
+# ============================================================================
+# AI/ML Dependencies - TODO: Uncomment when implementing AI models
+# ============================================================================
+
+# Computer Vision - YOLOv8 Object Detection
+# torch==2.2.1
+# torchvision==0.17.1
+# ultralytics==8.1.19
+# opencv-python==4.9.0.80
+
+# Natural Language Processing - BLIP Image Captioning
+# transformers==4.39.1
+# sentence-transformers==2.5.0
+
+# Additional ML utilities (when needed)
+# scikit-learn==1.4.1
+# numpy==1.24.3
+# matplotlib==3.8.3
+
+# Document processing (if adding document analysis features)
+# langchain==0.1.11
+# langchain-community==0.0.27
+# langchain-text-splitters==0.0.1
+# pytesseract==0.3.10
+
+# GPU acceleration (if using CUDA)
+# torch-audio==2.2.1  # For audio processing if needed
+
+# ============================================================================
+# Installation Instructions:
+# 
+# 1. Install base requirements:
+#    pip install -r requirements.txt
+#
+# 2. For AI model implementation, uncomment and install:
+#    pip install torch torchvision ultralytics transformers opencv-python
+#
+# 3. For GPU support (if available):
+#    pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+#
+# 4. For development:
+#    pip install -r requirements.txt pytest black flake8
+# ============================================================================
