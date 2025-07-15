@@ -311,3 +311,53 @@ class VectorDBController(BaseController):
         except Exception as e:
             print(f"Error updating embedding: {e}")
             return False
+    
+    def health_check(self) -> Dict[str, Any]:
+        """
+        Check the health status of the vector database
+        
+        Returns:
+            dict: Health status and diagnostic information
+        """
+        try:
+            health_status = {
+                'status': 'healthy',
+                'collection_name': self.collection_name,
+                'available': self.is_available()
+            }
+            
+            if self.is_available():
+                # Test basic functionality
+                try:
+                    # Get collection stats
+                    stats = self.get_collection_stats()
+                    health_status.update(stats)
+                    
+                    # Test client connection
+                    heartbeat = self.client.heartbeat()
+                    health_status['heartbeat'] = heartbeat
+                    
+                except Exception as e:
+                    health_status['status'] = 'warning'
+                    health_status['warning'] = f"Basic operations failed: {e}"
+            else:
+                health_status['status'] = 'unhealthy'
+                health_status['error'] = 'Vector database components not available'
+                
+            return health_status
+            
+        except Exception as e:
+            return {
+                'status': 'error',
+                'error': str(e),
+                'collection_name': self.collection_name,
+                'available': False
+            }
+
+    def cleanup(self):
+        """Clean up resources"""
+        try:
+            # ChromaDB doesn't require explicit cleanup, but we can log it
+            self.logger.info("Vector database resources cleaned up")
+        except Exception as e:
+            self.logger.error(f"Error during cleanup: {e}")

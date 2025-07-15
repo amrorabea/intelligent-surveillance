@@ -108,15 +108,13 @@ async def lifespan(app: FastAPI):
     try:
         if vision_controller:
             vision_controller.cleanup()
-            logger.info("✅ Vision models cleaned up")
             
         if vector_db_controller:
             vector_db_controller.cleanup()
-            logger.info("✅ Vector database cleaned up")
             
     except Exception as e:
-        logger.error(f"❌ Error during AI cleanup: {e}")
-    
+        logger.error(f"Error during AI model cleanup: {e}")
+
     logger.info("✅ Shutdown complete")
 
 app = FastAPI(

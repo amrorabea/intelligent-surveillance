@@ -625,7 +625,7 @@ class VisionController(BaseController):
             # Generate summary statistics
             successful_count = len(frame_paths) - failed_count
             total_objects = 0
-            unique_classes = set()
+            unique_classes = set();
             
             for result in results:
                 if (result.get('detections') and 
@@ -872,3 +872,34 @@ class VisionController(BaseController):
                 'error': str(e),
                 'timestamp': datetime.now().isoformat()
             }
+    
+    def cleanup(self):
+        """Clean up model resources"""
+        try:
+            # TODO: Implement proper model cleanup
+            # Clear GPU memory, unload models if needed
+            if hasattr(self, 'yolo_model') and self.yolo_model:
+                del self.yolo_model
+                self.yolo_model = None
+                
+            if hasattr(self, 'caption_model') and self.caption_model:
+                del self.caption_model
+                self.caption_model = None
+                
+            if hasattr(self, 'caption_processor') and self.caption_processor:
+                del self.caption_processor
+                self.caption_processor = None
+                
+            # Clear GPU cache if using PyTorch
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except:
+                pass
+                
+            self.models_loaded = False
+            self.logger.info("Vision models cleaned up")
+            
+        except Exception as e:
+            self.logger.error(f"Error during cleanup: {e}")

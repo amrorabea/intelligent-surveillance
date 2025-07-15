@@ -51,7 +51,7 @@ class ProcessingJob(Base):
     started_at = Column(DateTime)
     completed_at = Column(DateTime)
     error_message = Column(Text)
-    metadata = Column(JSON)  # Additional job-specific data
+    job_metadata = Column(JSON)  # Additional job-specific data
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class FrameCaption(Base):

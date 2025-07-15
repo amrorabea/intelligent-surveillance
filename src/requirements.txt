@@ -1,8 +1,12 @@
 # ============================================================================
-# Intelligent Surveillance System - Modern Compatible Requirements
-# Works with PyTorch 2.5.1 and GPU installations
-# Tested and verified working versions
+# Intelligent Surveillance System - Virtual Environment Requirements
+# Clean installation with PyTorch 2.5.1 and GPU support
 # ============================================================================
+
+# PyTorch ecosystem - Install first for CUDA compatibility
+torch==2.5.1
+torchvision==0.20.1
+torchaudio==2.5.1
 
 # Core FastAPI - Modern versions
 fastapi==0.115.0
@@ -26,14 +30,6 @@ pillow==11.0.0
 numpy==1.26.4
 pandas==2.2.3
 
-# ============================================================================
-# AI/ML Dependencies - Compatible with PyTorch 2.5.1
-# ============================================================================
-
-# PyTorch ecosystem (keep your existing installation)
-# torch==2.5.1  # Keep your existing version
-# torchvision==0.20.1  # Update to match
-
 # Computer Vision - YOLOv8 Object Detection - Latest version
 ultralytics==8.3.0
 
@@ -49,9 +45,7 @@ chromadb==0.5.23
 scikit-learn==1.6.0
 matplotlib==3.10.0
 
-# ============================================================================
 # Configuration and utilities - MODERN VERSIONS
-# ============================================================================
 python-dotenv==1.0.1
 pydantic==2.10.0
 pydantic-settings==2.8.0
@@ -68,31 +62,3 @@ structlog==24.5.0
 tqdm==4.67.1
 aiofiles==24.1.0
 click==8.1.8
-
-# ============================================================================
-# Installation Strategy:
-# 
-# 1. Clean install:
-#    pip uninstall -y $(pip freeze | cut -d'=' -f1)
-#    pip install -r requirements.txt
-#
-# 2. Verify PyTorch GPU:
-#    python -c "import torch; print(f'PyTorch: {torch.__version__}, CUDA: {torch.cuda.is_available()}')"
-#
-# 3. Test core system:
-#    python -c "from fastapi import FastAPI; print('FastAPI OK')"
-#    python -c "from ultralytics import YOLO; print('YOLO OK')"
-#    python -c "from transformers import BlipProcessor; print('BLIP OK')"
-#
-# 4. Start server:
-#    cd src && uvicorn main:app --reload --host 0.0.0.0 --port 5000
-#
-# ============================================================================
-# Version Strategy Explained:
-#
-# - Upgraded to modern, compatible versions for PyTorch 2.5.1
-# - Ensured all packages are conflict-free and stable
-# - Minimal set focuses on core functionality with latest updates
-# - Can add advanced features later once core works
-#
-# ============================================================================
