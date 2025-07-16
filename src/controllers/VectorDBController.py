@@ -8,9 +8,15 @@ from .BaseController import BaseController
 logger = logging.getLogger(__name__)
 
 class VectorDBController(BaseController):
-    def __init__(self, collection_name="surveillance_data"):
+    def __init__(self, collection_name: str = "surveillance_collection"):
         super().__init__()
         
+        # Disable telemetry to avoid errors
+        import os
+        os.environ["ANONYMIZED_TELEMETRY"] = "False"
+        
+        self.collection_name = collection_name
+
         # Set up ChromaDB client with persistent storage
         db_dir = os.path.join(self.files_dir, "chromadb")
         os.makedirs(db_dir, exist_ok=True)
@@ -18,7 +24,6 @@ class VectorDBController(BaseController):
         self.client = None
         self.encoder = None
         self.collection = None
-        self.collection_name = collection_name
         
         # Initialize connections
         self._initialize_client(db_dir)

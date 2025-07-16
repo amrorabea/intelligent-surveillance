@@ -159,12 +159,20 @@ class ProcessController(BaseController):
                 # B. Object Tracking (pass the actual frame for tracking)
                 frame = cv2.imread(frame_path)
                 if frame is not None:
-                    # Extract bounding boxes for tracking
+                    # Extract bounding boxes for tracking - FIX THE KEY NAME
                     bboxes = []
                     if detections and 'detections' in detections:
                         for detection in detections['detections']:
-                            if 'box' in detection:
-                                bboxes.append(detection['box'])
+                            if 'bbox' in detection:  # Changed from 'box' to 'bbox'
+                                bbox_data = detection['bbox']
+                                # Convert to format expected by tracker: [x1, y1, x2, y2]
+                                bbox = [
+                                    bbox_data['x1'], 
+                                    bbox_data['y1'], 
+                                    bbox_data['x2'], 
+                                    bbox_data['y2']
+                                ]
+                                bboxes.append(bbox)
                     
                     tracking_results = tracking_controller.track_objects(frame, bboxes)
                 else:
@@ -185,16 +193,24 @@ class ProcessController(BaseController):
                 # Add detected object classes to metadata
                 if detections and 'detections' in detections:
                     metadata["detected_objects"] = [d.get('class', 'unknown') for d in detections['detections']]
+                    metadata["total_detections"] = len(detections['detections'])
                 else:
                     metadata["detected_objects"] = []
-                
+                    metadata["total_detections"] = 0
+
                 # Store the caption in vector database for semantic search
-                storage_success = vector_db.store_embedding(
-                    document_id=f"{file_id}_{timestamp}",
-                    text=caption,
-                    metadata=metadata
-                )
-                
+                storage_success = False
+                if caption and isinstance(caption, str) and len(caption.strip()) > 0:
+                    try:
+                        storage_success = vector_db.store_embedding(
+                            document_id=f"{file_id}_{timestamp}",
+                            text=caption,
+                            metadata=metadata
+                        )
+                    except Exception as e:
+                        print(f"Error storing embedding: {e}")
+                        storage_success = False
+
                 # Compile frame results
                 frame_result = {
                     "timestamp": timestamp,

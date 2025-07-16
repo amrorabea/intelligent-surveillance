@@ -13,6 +13,7 @@ All AI model implementations are marked as TODOs for user implementation.
 import os
 import logging
 from datetime import datetime
+import time
 from typing import Dict, List, Any, Optional
 
 from .BaseController import BaseController
@@ -95,45 +96,76 @@ class VisionController(BaseController):
     def _setup_yolo_model(self) -> None:
         """
         Setup YOLOv8 model for object detection.
-        
-        TODO: Implement actual YOLOv8 model loading and initialization.
         """
         try:
             model_path = os.path.join(self.model_cache_dir, 'yolov8n.pt')
-            
-            # TODO: Implement YOLOv8 model loading
-            """
-            Example implementation:
-            
-            from ultralytics import YOLO
-            
+            try:
+                from ultralytics import YOLO
+            except ImportError:
+                logger.error("ultralytics package not found. Install with: pip install ultralytics")
+                self.model_info['yolo'] = {
+                    'status': 'dependency_missing',
+                    'error': 'ultralytics package not installed',
+                    'install_command': 'pip install ultralytics'
+                }
+                return
+
             if os.path.exists(model_path):
                 self.yolo_model = YOLO(model_path)
                 logger.info(f"YOLOv8 model loaded from {model_path}")
             else:
-                # Download model if not found
-                self.yolo_model = YOLO('yolov8n.pt')  # This will download the model
+                logger.info("YOLOv8 model not found locally, downloading...")
+                # This will automatically download the model
+                self.yolo_model = YOLO('yolov8n.pt')
+                # Save to cache directory
+                os.makedirs(self.model_cache_dir, exist_ok=True)
                 self.yolo_model.save(model_path)
-                logger.info("YOLOv8 model downloaded and cached")
+                logger.info(f"YOLOv8 model downloaded and saved to {model_path}")
             
-            # Validate model
-            if self.yolo_model:
-                # Test inference on dummy data to ensure model works
-                dummy_result = self.yolo_model.predict(source='https://ultralytics.com/images/bus.jpg', save=False, verbose=False)
+            # Validate model with a test prediction
+            try:
+                # Test with a small dummy image
+                import numpy as np
+                from PIL import Image
+                
+                # Create a test image (3x640x640 RGB)
+                test_image = np.random.randint(0, 255, (640, 640, 3), dtype=np.uint8)
+                test_pil = Image.fromarray(test_image)
+                
+                # Run a quick test prediction
+                results = self.yolo_model.predict(source=test_pil, save=False, verbose=False, imgsz=640)
+                
                 logger.info("YOLOv8 model validation successful")
-            """
-            
-            # Placeholder implementation
-            logger.info(f"TODO: Implement YOLOv8 model loading from {model_path}")
-            self.model_info['yolo'] = {
-                'status': 'not_implemented',
-                'model_path': model_path,
-                'model_type': 'YOLOv8n'
-            }
+                
+                # Update model info
+                self.model_info['yolo'] = {
+                    'status': 'loaded',
+                    'model_path': model_path,
+                    'model_type': 'YOLOv8n',
+                    'model_size': 'nano',
+                    'classes': len(self.yolo_model.names),
+                    'class_names': list(self.yolo_model.names.values()),
+                    'device': str(self.yolo_model.device),
+                    'validation': 'passed'
+                }
+                
+            except Exception as validation_error:
+                logger.warning(f"YOLOv8 model validation failed: {validation_error}")
+                self.model_info['yolo'] = {
+                    'status': 'loaded_unvalidated',
+                    'model_path': model_path,
+                    'model_type': 'YOLOv8n',
+                    'validation_error': str(validation_error)
+                }
             
         except Exception as e:
             logger.error(f"Failed to setup YOLO model: {e}")
-            self.model_info['yolo'] = {'status': 'error', 'error': str(e)}
+            self.yolo_model = None
+            self.model_info['yolo'] = {
+                'status': 'error',
+                'error': str(e),
+                'model_path': model_path if 'model_path' in locals() else None
+            }
     
     def _setup_caption_model(self) -> None:
         """
@@ -242,6 +274,9 @@ class VisionController(BaseController):
         Returns:
             dict: Detection results with classes, bounding boxes, and confidence scores
         """
+
+        start_time = time.time()
+
         try:
             # Validate input
             if not self._validate_image_file(frame_path):
@@ -252,12 +287,6 @@ class VisionController(BaseController):
                     'frame_path': frame_path
                 }
             
-            threshold = confidence_threshold or self.detection_threshold
-            
-            # TODO: Implement actual YOLOv8 object detection
-            """
-            Example implementation:
-            
             if not self.yolo_model:
                 return {
                     'detections': [],
@@ -265,43 +294,57 @@ class VisionController(BaseController):
                     'error': 'YOLO model not loaded',
                     'frame_path': frame_path
                 }
+
+            threshold = confidence_threshold or self.detection_threshold
             
-            # Run inference
-            results = self.yolo_model(frame_path, conf=threshold, verbose=False)
+            logger.debug(f"Running YOLO detection on {frame_path} with threshold {threshold}")
             
+            results = self.yolo_model.predict(
+                source=frame_path,
+                conf=threshold,
+                save=False,
+                verbose=False,
+                imgsz=640
+            )
+
             # Process results
             detections = []
             for result in results:
-                if result.boxes is not None:
+                if result.boxes is not None and len(result.boxes) > 0:
                     boxes = result.boxes
+                    
                     for i, box in enumerate(boxes):
                         if i >= self.max_detections:
                             break
-                            
-                        # Extract box data
-                        x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-                        confidence = float(box.conf[0].cpu())
-                        class_id = int(box.cls[0].cpu())
+                        
+                        # Extract box data (convert tensors to Python types)
+                        x1, y1, x2, y2 = box.xyxy[0].cpu().numpy().astype(float)
+                        confidence = float(box.conf[0].cpu().numpy())
+                        class_id = int(box.cls[0].cpu().numpy())
                         class_name = result.names[class_id]
                         
                         # Calculate box dimensions
                         width = x2 - x1
                         height = y2 - y1
                         area = width * height
+                        center_x = x1 + width / 2
+                        center_y = y1 + height / 2
                         
                         detection = {
                             'id': i,
                             'class': class_name,
                             'class_id': class_id,
-                            'confidence': confidence,
+                            'confidence': round(confidence, 3),
                             'bbox': {
-                                'x1': float(x1),
-                                'y1': float(y1),
-                                'x2': float(x2),
-                                'y2': float(y2),
-                                'width': float(width),
-                                'height': float(height),
-                                'area': float(area)
+                                'x1': round(x1, 2),
+                                'y1': round(y1, 2),
+                                'x2': round(x2, 2),
+                                'y2': round(y2, 2),
+                                'width': round(width, 2),
+                                'height': round(height, 2),
+                                'area': round(area, 2),
+                                'center_x': round(center_x, 2),
+                                'center_y': round(center_y, 2)
                             }
                         }
                         detections.append(detection)
@@ -311,130 +354,40 @@ class VisionController(BaseController):
                 'total_objects': len(detections),
                 'threshold_used': threshold,
                 'frame_path': frame_path,
-                'processing_time': time.time() - start_time
+                'processing_time': time.time() - start_time,
+                'model_info': {
+                    'model_type': 'YOLOv8n',
+                    'image_size': 640
+                }
             }
-            """
-            
-            # Placeholder implementation
-            logger.info(f"TODO: Implement YOLO object detection for {frame_path}")
-            return {
-                'detections': [],
-                'total_objects': 0,
-                'threshold_used': threshold,
-                'frame_path': frame_path,
-                'status': 'not_implemented',
-                'message': 'TODO: Implement YOLOv8 object detection'
-            }
-            
+
         except Exception as e:
             logger.error(f"Error detecting objects in {frame_path}: {e}")
             return {
                 'detections': [],
                 'total_objects': 0,
                 'error': str(e),
-                'frame_path': frame_path
-            }
-    
-    def generate_caption(self, 
-                        frame_path: str, 
-                        max_length: int = 50,
-                        min_length: int = 10) -> Dict[str, Any]:
-        """
-        Generate natural language description of a frame using BLIP.
-        
-        Args:
-            frame_path: Path to the image frame
-            max_length: Maximum caption length in tokens
-            min_length: Minimum caption length in tokens
-            
-        Returns:
-            dict: Caption result with text and metadata
-        """
-        try:
-            # Validate input
-            if not self._validate_image_file(frame_path):
-                return {
-                    'caption': '',
-                    'error': 'Invalid or missing image file',
-                    'frame_path': frame_path
-                }
-            
-            # TODO: Implement actual BLIP image captioning
-            """
-            Example implementation:
-            
-            if not self.caption_model or not self.caption_processor:
-                return {
-                    'caption': '',
-                    'error': 'Caption model not loaded',
-                    'frame_path': frame_path
-                }
-            
-            # Load and preprocess image
-            from PIL import Image
-            import torch
-            
-            image = Image.open(frame_path).convert('RGB')
-            
-            # Process image
-            inputs = self.caption_processor(image, return_tensors="pt")
-            
-            # Move to appropriate device if using GPU
-            device = next(self.caption_model.parameters()).device
-            inputs = {k: v.to(device) for k, v in inputs.items()}
-            
-            # Generate caption
-            with torch.no_grad():
-                outputs = self.caption_model.generate(
-                    **inputs,
-                    max_length=max_length,
-                    min_length=min_length,
-                    num_beams=4,
-                    early_stopping=True,
-                    temperature=0.7
-                )
-            
-            # Decode caption
-            caption = self.caption_processor.decode(outputs[0], skip_special_tokens=True)
-            
-            # Clean up caption
-            caption = caption.strip()
-            
-            # Remove common prefixes
-            prefixes_to_remove = ['a picture of', 'an image of', 'a photo of']
-            for prefix in prefixes_to_remove:
-                if caption.lower().startswith(prefix):
-                    caption = caption[len(prefix):].strip()
-                    break
-            
-            return {
-                'caption': caption,
                 'frame_path': frame_path,
-                'model_config': {
-                    'max_length': max_length,
-                    'min_length': min_length,
-                    'num_beams': 4
-                },
                 'processing_time': time.time() - start_time
             }
-            """
+    
+    def generate_caption(self, image_path: str) -> str:
+        """
+        Generate a descriptive caption for an image using BLIP model
+        """
+        try:
+            if not self._validate_image_file(image_path):
+                return "Invalid image file"
+                
+            # TODO: Implement BLIP model for image captioning
+            logger.info(f"TODO: Implement BLIP captioning for {image_path}")
             
-            # Placeholder implementation
-            logger.info(f"TODO: Implement BLIP captioning for {frame_path}")
-            return {
-                'caption': '',
-                'frame_path': frame_path,
-                'status': 'not_implemented',
-                'message': 'TODO: Implement BLIP image captioning'
-            }
+            # Return meaningful placeholder text instead of integer
+            return "Surveillance scene captured - AI captioning system under development"
             
         except Exception as e:
-            logger.error(f"Error generating caption for {frame_path}: {e}")
-            return {
-                'caption': '',
-                'error': str(e),
-                'frame_path': frame_path
-            }
+            logger.error(f"Error generating caption for {image_path}: {e}")
+            return f"Caption generation error: {str(e)}"
     
     def analyze_frame(self, 
                      frame_path: str, 
