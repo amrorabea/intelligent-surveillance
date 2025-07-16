@@ -3,6 +3,7 @@ from celery.result import AsyncResult
 from typing import Dict, Any, List
 import uuid
 import os
+import time
 
 # Celery configuration
 def create_celery_app():
@@ -164,6 +165,9 @@ def process_video_task(self, project_id: str, file_id: str, sample_rate: float,
     
     This is a placeholder - you'll implement the actual processing logic
     """
+
+    start_time = time.time()
+
     try:
         # Update task state to indicate it has started
         self.update_state(
@@ -171,32 +175,60 @@ def process_video_task(self, project_id: str, file_id: str, sample_rate: float,
             meta={'current': 0, 'total': 100, 'status': 'Starting video processing...'}
         )
         
-        # TODO: Implement actual video processing here
-        # This is where you'll call your ProcessController.process_video() method
-        # and update progress throughout the processing
-        
-        # Example progress updates:
-        # self.update_state(state='PROGRESS', meta={'current': 25, 'total': 100, 'status': 'Extracting frames...'})
-        # self.update_state(state='PROGRESS', meta={'current': 50, 'total': 100, 'status': 'Running object detection...'})
-        # self.update_state(state='PROGRESS', meta={'current': 75, 'total': 100, 'status': 'Generating captions...'})
-        
+        from controllers.ProcessController import ProcessController
+
+        process_controller = ProcessController(project_id=project_id)
+
+        self.update_state(state='PROGRESS', meta={'current': 10, 'total': 100, 'status': 'Initializing AI models...'})
+        self.update_state(state='PROGRESS', meta={'current': 25, 'total': 100, 'status': 'Extracting frames from video...'})
+
+        result = process_controller.process_video(file_id=file_id, sample_rate=sample_rate)
+
+        self.update_state(state='PROGRESS', meta={'current': 75, 'total': 100, 'status': 'Finalizing results...'})
+
+        processing_time = time.time()
+
+        self.update_state(state='PROGRESS', meta={'current': 100, 'total': 100, 'status': 'Processing complete!'})
+
+        if 'error' in result:
+            self.update_state(state='FAILURE', meta={'error': result['error'], 'status': 'Processing failed'})
+
         # Placeholder result
-        result = {
+        final_result = {
             'project_id': project_id,
             'file_id': file_id,
-            'processed_frames': 0,  # TODO: Update with actual count
-            'total_detections': 0,  # TODO: Update with actual count
-            'processing_time': 0.0,  # TODO: Calculate actual time
+            'processed_frames': result.get('processed_frames', 0),
+            'total_extracted_frames': result.get('total_extracted_frames', 0),
+            'total_detections': 0,  # We'll calculate this from the results
+            'processing_time': processing_time,
+            'success_rate': result.get('success_rate', 0),
             'status': 'completed'
         }
         
+        if 'sample_results' in result:
+            total_detections = 0
+            for frame_result in result.get('sample_results', []):
+                if frame_result.get('detections') and 'detections' in frame_result['detections']:
+                    total_detections += len(frame_result['detections']['detections'])
+            final_result['total_detections'] = total_detections
+        
+
         return result
         
     except Exception as e:
         # Update task state to failed
+        processing_time = time.time() - start_time
+        error_msg = str(e)
+        
         self.update_state(
             state='FAILURE',
-            meta={'error': str(e), 'status': 'Processing failed'}
+            meta={
+                'error': error_msg, 
+                'status': 'Processing failed',
+                'processing_time': processing_time,
+                'project_id': project_id,
+                'file_id': file_id
+            }
         )
         raise
 
