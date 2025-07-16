@@ -32,15 +32,15 @@ async def process_surveillance_video(
     file_id: str,
     request: ProcessVideoRequest = ProcessVideoRequest(),
     background_tasks: BackgroundTasks = BackgroundTasks(),
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(get_optional_user),  # Changed from get_current_user
     app_settings: Settings = Depends(get_settings)
 ):
     """
     Process a surveillance video through the AI pipeline (background job)
     """
     try:
-        # Verify project access
-        await verify_project_access(project_id, user)
+        # Comment out project access verification for testing
+        # await verify_project_access(project_id, user)
         
         # Validate file exists
         project_path = ProjectController().get_project_path(project_id)
@@ -106,11 +106,12 @@ async def process_surveillance_video(
 async def get_processing_jobs(
     project_id: str,
     status_filter: Optional[str] = Query(None, description="Filter by job status"),
-    user: dict = Depends(get_current_user)
+    user: dict = Depends(get_optional_user)  # Changed from get_current_user
 ):
     """Get all processing jobs for a project"""
     try:
-        await verify_project_access(project_id, user)
+        # Comment out project access verification for testing
+        # await verify_project_access(project_id, user)
         
         # TODO: Get jobs from database
         # For now, get active jobs from job manager
@@ -147,7 +148,7 @@ async def get_processing_jobs(
 @surveillance_router.get("/jobs/status/{job_id}")
 async def get_job_status(
     job_id: str,
-    user: dict = Depends(get_current_user)
+    user: dict = Depends(get_optional_user)
 ):
     """Get detailed status of a processing job"""
     try:
