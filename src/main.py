@@ -87,16 +87,16 @@ async def lifespan(app: FastAPI):
         app.state.vector_db_controller = None
     
     # Preload/warm up models (optional - for faster first requests)
-    try:
-        if vision_controller and vision_controller.models_loaded:
-            logger.info("🔥 Warming up AI models...")
-            await asyncio.get_event_loop().run_in_executor(
-                None, 
-                vision_controller.warmup_models
-            )
-            logger.info("✅ AI models warmed up")
-    except Exception as e:
-        logger.warning(f"⚠️  Model warmup failed: {e}")
+    # try:
+    #     if vision_controller and vision_controller.models_loaded:
+    #         logger.info("🔥 Warming up AI models...")
+    #         await asyncio.get_event_loop().run_in_executor(
+    #             None, 
+    #             vision_controller.warmup_models
+    #         )
+    #         logger.info("✅ AI models warmed up")
+    # except Exception as e:
+    #     logger.warning(f"⚠️  Model warmup failed: {e}")
     
     logger.info("✅ Application startup complete")
     yield

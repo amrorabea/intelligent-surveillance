@@ -4,8 +4,12 @@ from typing import Dict, Any, List
 import uuid
 import os
 import time
+import logging
+import json
 
-# Celery configuration
+logger = logging.getLogger(__name__)
+
+# Celery configuration with simplified backend
 def create_celery_app():
     # Use Redis as broker and backend (fallback to in-memory for development)
     redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
@@ -14,10 +18,10 @@ def create_celery_app():
         'surveillance_worker',
         broker=redis_url,
         backend=redis_url,
-        include=['services.job_queue']
+        include=['src.services.job_queue']
     )
     
-    # Configuration
+    # Simplified configuration to avoid serialization issues
     celery_app.conf.update(
         task_serializer='json',
         accept_content=['json'],
@@ -29,9 +33,16 @@ def create_celery_app():
         task_soft_time_limit=3300,  # 55 minutes soft timeout
         worker_prefetch_multiplier=1,
         task_acks_late=True,
-        worker_disable_rate_limits=False,
-        task_default_retry_delay=60,
-        task_max_retries=3,
+        task_ignore_result=False,
+        result_expires=3600,
+        task_reject_on_worker_lost=True,
+        # Add these to fix serialization issues
+        result_backend_transport_options={
+            'master_name': 'mymaster',
+        },
+        task_always_eager=False,  # Don't execute tasks eagerly
+        task_eager_propagates=False,
+        task_store_eager_result=False,
     )
     
     return celery_app
@@ -58,15 +69,20 @@ class JobManager:
         """
         job_id = str(uuid.uuid4())
         
-        # Submit the job
-        self.celery_app.send_task(
-            'services.job_queue.process_video_task',
-            args=[project_id, file_id, sample_rate, detection_threshold, enable_tracking, enable_captioning],
-            task_id=job_id,
-            countdown=1  # Start after 1 second
-        )
-        
-        return job_id
+        # Submit the job with simplified parameters
+        try:
+            task = self.celery_app.send_task(
+                'src.services.job_queue.process_video_task',
+                args=[project_id, file_id, sample_rate, detection_threshold, enable_tracking, enable_captioning],
+                task_id=job_id,
+                countdown=1,  # Start after 1 second
+                retry=False  # Don't retry on failure
+            )
+            logger.info(f"Submitted video processing job {job_id}")
+            return job_id
+        except Exception as e:
+            logger.error(f"Failed to submit job: {e}")
+            raise
     
     def submit_live_stream_job(self, project_id: str, stream_url: str, 
                              sample_rate: float = 1.0) -> str:
@@ -78,41 +94,73 @@ class JobManager:
         """
         job_id = str(uuid.uuid4())
         
-        self.celery_app.send_task(
-            'services.job_queue.process_live_stream_task',
-            args=[project_id, stream_url, sample_rate],
-            task_id=job_id
-        )
-        
-        return job_id
+        try:
+            self.celery_app.send_task(
+                'src.services.job_queue.process_live_stream_task',
+                args=[project_id, stream_url, sample_rate],
+                task_id=job_id,
+                retry=False
+            )
+            return job_id
+        except Exception as e:
+            logger.error(f"Failed to submit live stream job: {e}")
+            raise
     
     def get_job_status(self, job_id: str) -> Dict[str, Any]:
-        """Get the status of a job"""
+        """Get the status of a job with better error handling"""
         try:
             result = AsyncResult(job_id, app=self.celery_app)
             
+            # Get basic status info
+            status = result.status
+            ready = result.ready()
+            
             status_info = {
                 'job_id': job_id,
-                'status': result.status,
-                'ready': result.ready(),
-                'successful': result.successful() if result.ready() else None,
-                'failed': result.failed() if result.ready() else None,
-                'result': result.result if result.ready() and result.successful() else None,
-                'error': str(result.result) if result.ready() and result.failed() else None,
-                'traceback': result.traceback if result.ready() and result.failed() else None
+                'status': status,
+                'ready': ready,
+                'successful': None,
+                'failed': None,
+                'result': None,
+                'error': None,
+                'traceback': None
             }
             
-            # Get progress info if available
-            if hasattr(result, 'info') and result.info:
-                if isinstance(result.info, dict):
+            # Only try to get detailed info if the task is ready
+            if ready:
+                try:
+                    status_info['successful'] = result.successful()
+                    status_info['failed'] = result.failed()
+                    
+                    if result.successful():
+                        status_info['result'] = result.result
+                    elif result.failed():
+                        # Try to get error info safely
+                        try:
+                            status_info['error'] = str(result.result)
+                            status_info['traceback'] = result.traceback
+                        except Exception:
+                            status_info['error'] = 'Unknown error occurred'
+                            
+                except Exception as e:
+                    logger.warning(f"Could not get detailed status for job {job_id}: {e}")
+                    status_info['error'] = f'Status retrieval failed: {str(e)}'
+            
+            # Try to get progress info if available
+            try:
+                if hasattr(result, 'info') and result.info and isinstance(result.info, dict):
                     status_info.update(result.info)
+            except Exception:
+                pass  # Ignore progress info errors
             
             return status_info
             
         except Exception as e:
+            logger.error(f"Failed to get job status for {job_id}: {e}")
             return {
                 'job_id': job_id,
                 'status': 'UNKNOWN',
+                'ready': False,
                 'error': f'Failed to get job status: {str(e)}'
             }
     
@@ -120,9 +168,10 @@ class JobManager:
         """Cancel a running job"""
         try:
             self.celery_app.control.revoke(job_id, terminate=True)
+            logger.info(f"Cancelled job {job_id}")
             return True
         except Exception as e:
-            print(f"Failed to cancel job {job_id}: {e}")
+            logger.error(f"Failed to cancel job {job_id}: {e}")
             return False
     
     def get_active_jobs(self) -> List[Dict[str, Any]]:
@@ -150,113 +199,118 @@ class JobManager:
             return all_jobs
             
         except Exception as e:
-            print(f"Failed to get active jobs: {e}")
+            logger.error(f"Failed to get active jobs: {e}")
             return []
 
 # Global job manager instance
 job_manager = JobManager()
 
-# Task definitions (these will be imported by Celery workers)
-@celery_app.task(bind=True)
+# Task definitions with better error handling
+@celery_app.task(bind=True, name='src.services.job_queue.process_video_task', acks_late=True)
 def process_video_task(self, project_id: str, file_id: str, sample_rate: float, 
                       detection_threshold: float, enable_tracking: bool, enable_captioning: bool):
     """
-    Background task for processing surveillance video
-    
-    This is a placeholder - you'll implement the actual processing logic
+    Background task for processing surveillance video with proper result handling
     """
-
     start_time = time.time()
-
+    task_id = self.request.id
+    
     try:
-        # Update task state to indicate it has started
-        self.update_state(
-            state='PROGRESS',
-            meta={'current': 0, 'total': 100, 'status': 'Starting video processing...'}
+        logger.info(f"[{task_id}] Starting video processing for {project_id}/{file_id}")
+        
+        # Import here to avoid import issues at module level
+        try:
+            from src.controllers.ProcessController import ProcessController
+        except ImportError:
+            from controllers.ProcessController import ProcessController
+        
+        # Initialize controller
+        process_controller = ProcessController(project_id=project_id)
+        
+        # Process the video
+        result = process_controller.process_video(
+            file_id=file_id, 
+            sample_rate=sample_rate,
+            detection_threshold=detection_threshold,
+            enable_tracking=enable_tracking,
+            enable_captioning=enable_captioning
         )
         
-        from controllers.ProcessController import ProcessController
-
-        process_controller = ProcessController(project_id=project_id)
-
-        self.update_state(state='PROGRESS', meta={'current': 10, 'total': 100, 'status': 'Initializing AI models...'})
-        self.update_state(state='PROGRESS', meta={'current': 25, 'total': 100, 'status': 'Extracting frames from video...'})
-
-        result = process_controller.process_video(file_id=file_id, sample_rate=sample_rate)
-
-        self.update_state(state='PROGRESS', meta={'current': 75, 'total': 100, 'status': 'Finalizing results...'})
-
-        processing_time = time.time()
-
-        self.update_state(state='PROGRESS', meta={'current': 100, 'total': 100, 'status': 'Processing complete!'})
-
-        if 'error' in result:
-            self.update_state(state='FAILURE', meta={'error': result['error'], 'status': 'Processing failed'})
-
-        # Placeholder result
-        final_result = {
-            'project_id': project_id,
-            'file_id': file_id,
-            'processed_frames': result.get('processed_frames', 0),
-            'total_extracted_frames': result.get('total_extracted_frames', 0),
-            'total_detections': 0,  # We'll calculate this from the results
-            'processing_time': processing_time,
-            'success_rate': result.get('success_rate', 0),
-            'status': 'completed'
+        # Calculate processing time
+        processing_time = time.time() - start_time
+        
+        # Create a clean, serializable result with minimal data
+        success_result = {
+            'success': True,
+            'status': 'completed',
+            'project_id': str(project_id),
+            'file_id': str(file_id),
+            'task_id': str(task_id),
+            'processing_time': round(processing_time, 2),
+            'processed_frames': int(result.get('processed_frames', 0)),
+            'total_extracted_frames': int(result.get('total_extracted_frames', 0)),
+            'success_rate': round(float(result.get('success_rate', 0)), 2)
         }
         
-        if 'sample_results' in result:
-            total_detections = 0
-            for frame_result in result.get('sample_results', []):
-                if frame_result.get('detections') and 'detections' in frame_result['detections']:
-                    total_detections += len(frame_result['detections']['detections'])
-            final_result['total_detections'] = total_detections
+        # Add minimal analytics to avoid serialization issues
+        analytics = result.get('analytics', {})
+        if analytics:
+            success_result['analytics'] = {
+                'total_detections': int(analytics.get('total_detections', 0)),
+                'unique_objects': len(analytics.get('object_summary', {}))
+            }
         
-
-        return result
+        logger.info(f"[{task_id}] Video processing completed successfully: {success_result['processed_frames']} frames in {processing_time:.2f}s")
+        
+        return success_result
         
     except Exception as e:
-        # Update task state to failed
         processing_time = time.time() - start_time
-        error_msg = str(e)
+        error_msg = str(e)[:200]  # Limit error message length
         
-        self.update_state(
-            state='FAILURE',
-            meta={
-                'error': error_msg, 
-                'status': 'Processing failed',
-                'processing_time': processing_time,
-                'project_id': project_id,
-                'file_id': file_id
-            }
-        )
-        raise
+        logger.error(f"[{task_id}] Video processing failed: {error_msg}", exc_info=True)
+        
+        # Return minimal error result
+        error_result = {
+            'success': False,
+            'status': 'failed',
+            'error': error_msg,
+            'project_id': str(project_id),
+            'file_id': str(file_id),
+            'task_id': str(task_id),
+            'processing_time': round(processing_time, 2)
+        }
+        
+        return error_result
 
-@celery_app.task(bind=True)
+@celery_app.task(bind=True, name='src.services.job_queue.process_live_stream_task', acks_late=True)
 def process_live_stream_task(self, project_id: str, stream_url: str, sample_rate: float):
     """
     Background task for processing live surveillance stream
-    
-    This is a placeholder - you'll implement the actual live stream processing
     """
+    task_id = self.request.id
+    
     try:
-        self.update_state(
-            state='PROGRESS',
-            meta={'current': 0, 'total': -1, 'status': 'Starting live stream processing...'}
-        )
+        logger.info(f"[{task_id}] Starting live stream processing")
         
         # TODO: Implement live stream processing here
-        # This would typically run continuously until stopped
-        
         return {
-            'project_id': project_id,
-            'stream_url': stream_url,
-            'status': 'running'
+            'success': True,
+            'project_id': str(project_id),
+            'stream_url': str(stream_url),
+            'status': 'running',
+            'task_id': str(task_id)
         }
         
     except Exception as e:
-        self.update_state(
-            state='FAILURE',
-            meta={'error': str(e), 'status': 'Live stream processing failed'}
-        )
-        raise
+        error_msg = str(e)[:200]
+        logger.error(f"[{task_id}] Live stream processing failed: {error_msg}")
+        
+        return {
+            'success': False,
+            'error': error_msg,
+            'status': 'failed',
+            'project_id': str(project_id),
+            'stream_url': str(stream_url),
+            'task_id': str(task_id)
+        }

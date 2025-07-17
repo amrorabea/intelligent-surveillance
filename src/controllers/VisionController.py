@@ -16,7 +16,12 @@ from datetime import datetime
 import time
 from typing import Dict, List, Any, Optional
 
-from .BaseController import BaseController
+try:
+    # Try absolute imports first (for Celery running from project root)
+    from src.controllers.BaseController import BaseController
+except ImportError:
+    # Fall back to relative imports (for FastAPI running from src/)
+    from .BaseController import BaseController
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -168,56 +173,142 @@ class VisionController(BaseController):
             }
     
     def _setup_caption_model(self) -> None:
-        """
-        Setup BLIP model for image captioning.
-        
-        TODO: Implement actual BLIP model loading and initialization.
-        """
+        """Setup BLIP model using existing cached files"""
         try:
-            # TODO: Implement BLIP model loading
-            """
-            Example implementation:
-            
             from transformers import BlipProcessor, BlipForConditionalGeneration
             import torch
             
             model_name = "Salesforce/blip-image-captioning-base"
             cache_dir = os.path.join(self.model_cache_dir, 'blip')
             
-            try:
-                self.caption_processor = BlipProcessor.from_pretrained(
-                    model_name, 
-                    cache_dir=cache_dir
-                )
-                self.caption_model = BlipForConditionalGeneration.from_pretrained(
-                    model_name, 
-                    cache_dir=cache_dir,
-                    torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32
-                )
-                
-                # Move to appropriate device
-                device = "cuda" if torch.cuda.is_available() else "cpu"
-                self.caption_model = self.caption_model.to(device)
-                
-                logger.info(f"BLIP model loaded successfully on {device}")
-                
-            except Exception as e:
-                logger.error(f"Failed to load BLIP model: {e}")
-                self.caption_processor = None
-                self.caption_model = None
-            """
+            # Set environment variables to use our cache
+            os.environ["TRANSFORMERS_CACHE"] = cache_dir
+            os.environ["HF_HOME"] = cache_dir
             
-            # Placeholder implementation
-            logger.info("TODO: Implement BLIP model loading for image captioning")
-            self.model_info['blip'] = {
-                'status': 'not_implemented',
-                'model_name': 'Salesforce/blip-image-captioning-base',
-                'task': 'image_captioning'
-            }
+            logger.info(f"Loading BLIP model from cache: {model_name}")
+            logger.info(f"Cache directory: {cache_dir}")
+            
+            # Check if model files exist in cache
+            cached_model_path = os.path.join(cache_dir, "models--Salesforce--blip-image-captioning-base")
+            
+            if os.path.exists(cached_model_path):
+                logger.info("✅ Found existing BLIP model cache, using local files...")
+                
+                try:
+                    # Load processor from cache first
+                    self.caption_processor = BlipProcessor.from_pretrained(
+                        model_name,
+                        cache_dir=cache_dir,
+                        local_files_only=True  # Force use of local files only
+                    )
+                    logger.info("✅ BLIP processor loaded from cache")
+                    
+                except Exception as processor_error:
+                    logger.warning(f"Processor local load failed: {processor_error}, trying normal load...")
+                    self.caption_processor = BlipProcessor.from_pretrained(
+                        model_name,
+                        cache_dir=cache_dir
+                    )
+                    logger.info("✅ BLIP processor loaded")
+                
+                # Determine device and dtype
+                device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+                dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+                
+                try:
+                    # Try to load model from cache
+                    self.caption_model = BlipForConditionalGeneration.from_pretrained(
+                        model_name,
+                        cache_dir=cache_dir,
+                        torch_dtype=dtype,
+                        low_cpu_mem_usage=True,
+                        local_files_only=True  # Force use of local files only
+                    )
+                    logger.info("✅ BLIP model loaded from cache")
+                    
+                except Exception as model_error:
+                    logger.warning(f"Model local load failed: {model_error}, trying normal load...")
+                    self.caption_model = BlipForConditionalGeneration.from_pretrained(
+                        model_name,
+                        cache_dir=cache_dir,
+                        torch_dtype=dtype,
+                        low_cpu_mem_usage=True
+                    )
+                    logger.info("✅ BLIP model loaded")
+                
+                # Move to device and set precision
+                self.caption_model = self.caption_model.to(device)
+                if torch.cuda.is_available():
+                    self.caption_model = self.caption_model.half()
+                
+                self.caption_model.eval()
+                
+                # Validate model with existing cache
+                try:
+                    from PIL import Image
+                    test_image = Image.new('RGB', (224, 224), color='blue')
+                    
+                    # Process inputs and ensure they match model device/dtype
+                    inputs = self.caption_processor(test_image, return_tensors="pt")
+                    inputs = {k: v.to(device) for k, v in inputs.items()}
+                    
+                    # Ensure input dtype matches model
+                    if torch.cuda.is_available():
+                        inputs = {k: v.half() if v.dtype == torch.float32 else v for k, v in inputs.items()}
+                    
+                    with torch.no_grad():
+                        outputs = self.caption_model.generate(
+                            **inputs,
+                            max_length=20,
+                            num_beams=4,
+                            early_stopping=True,
+                            do_sample=False
+                        )
+                    
+                    test_caption = self.caption_processor.decode(outputs[0], skip_special_tokens=True)
+                    
+                    logger.info(f"🎉 BLIP model loaded and validated successfully on {device}")
+                    logger.info(f"Test caption: '{test_caption}'")
+                    
+                    self.model_info['blip'] = {
+                        'status': 'loaded',
+                        'model_name': model_name,
+                        'device': str(device),
+                        'dtype': str(dtype),
+                        'cache_dir': cache_dir,
+                        'test_caption': test_caption,
+                        'validation': 'passed'
+                    }
+                    
+                    return  # Success - exit here
+                    
+                except Exception as validation_error:
+                    logger.warning(f"BLIP model validation failed: {validation_error}")
+                    self.model_info['blip'] = {
+                        'status': 'loaded_unvalidated',
+                        'model_name': model_name,
+                        'device': str(device),
+                        'validation_error': str(validation_error)
+                    }
+                    return  # Still loaded, just unvalidated
+            
+            else:
+                logger.warning("No cached BLIP model found, would need to download")
+                self.model_info['blip'] = {
+                    'status': 'not_found',
+                    'error': 'No cached model files found',
+                    'cache_dir': cache_dir
+                }
+                return
             
         except Exception as e:
-            logger.error(f"Failed to setup caption model: {e}")
-            self.model_info['blip'] = {'status': 'error', 'error': str(e)}
+            logger.error(f"Failed to setup BLIP caption model: {e}")
+            self.caption_processor = None
+            self.caption_model = None
+            self.model_info['blip'] = {
+                'status': 'error',
+                'error': str(e)
+            }
     
     def _update_model_status(self) -> None:
         """Update the overall model loading status."""
@@ -348,7 +439,7 @@ class VisionController(BaseController):
                             }
                         }
                         detections.append(detection)
-            
+
             return {
                 'detections': detections,
                 'total_objects': len(detections),
@@ -371,23 +462,286 @@ class VisionController(BaseController):
                 'processing_time': time.time() - start_time
             }
     
-    def generate_caption(self, image_path: str) -> str:
+    def generate_caption(self, image_path: str, max_length: int = 50, num_beams: int = 4) -> str:
         """
         Generate a descriptive caption for an image using BLIP model
+        
+        Args:
+            image_path: Path to the image file
+            max_length: Maximum caption length (default: 50)
+            num_beams: Number of beams for beam search (default: 4)
+            
+        Returns:
+            str: Generated caption describing the image content
         """
+        import time
+        start_time = time.time()
+
         try:
+            # Validate input
             if not self._validate_image_file(image_path):
                 return "Invalid image file"
                 
-            # TODO: Implement BLIP model for image captioning
-            logger.info(f"TODO: Implement BLIP captioning for {image_path}")
+            if not self.caption_model or not self.caption_processor:
+                logger.warning('BLIP model not loaded, using placeholder caption')
+                return 'Surveillance scene captured - AI captioning system under development'
             
-            # Return meaningful placeholder text instead of integer
-            return "Surveillance scene captured - AI captioning system under development"
+            from PIL import Image
+            import torch
+
+            # Load and preprocess image
+            try:
+                image = Image.open(image_path).convert('RGB')
+                
+                # Resize if image is too large (for memory efficiency)
+                max_size = 1024
+                if max(image.size) > max_size:
+                    image.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
+                    logger.debug(f"Resized image from original size to {image.size}")
+                
+            except Exception as e:
+                logger.error(f"Error loading image {image_path}: {e}")
+                return f"Error loading image: {str(e)}"
             
+            # Get device with error handling
+            try:
+                device = next(self.caption_model.parameters()).device
+            except Exception as e:
+                logger.error(f"Error getting model device: {e}")
+                device = torch.device('cpu')
+
+            # Generate caption
+            try:
+                # Preprocess image for model
+                inputs = self.caption_processor(image, return_tensors='pt')
+                
+                # Move inputs to the same device as model and match dtype
+                inputs = {k: v.to(device) for k, v in inputs.items()}
+                
+                # Ensure input dtype matches model dtype for CUDA
+                if device.type == 'cuda' and hasattr(self.caption_model, 'dtype'):
+                    # Convert float tensors to match model precision
+                    inputs = {k: v.half() if v.dtype == torch.float32 else v for k, v in inputs.items()}
+
+                # Generate caption with memory optimization
+                with torch.no_grad():
+                    # Clear GPU cache before generation if using CUDA
+                    if device.type == 'cuda':
+                        torch.cuda.empty_cache()
+                    
+                    # Generate caption with safe parameters
+                    # Note: BLIP model handles tokenizer settings internally
+                    generation_kwargs = {
+                        'max_length': max_length,
+                        'num_beams': num_beams,
+                        'early_stopping': True,
+                        'do_sample': False,
+                        'no_repeat_ngram_size': 2,  # Avoid repetitive phrases
+                        'length_penalty': 1.0       # Encourage appropriate length
+                    }
+                    
+                    outputs = self.caption_model.generate(**inputs, **generation_kwargs)
+            
+                # Decode and clean caption
+                caption = self.caption_processor.decode(outputs[0], skip_special_tokens=True)
+                caption = caption.strip()
+
+                # Post-process caption
+                if caption and not caption.endswith(('.', '!', '?')):
+                    caption += '.'
+
+                # Capitalize first letter
+                if caption:
+                    caption = caption[0].upper() + caption[1:] if len(caption) > 1 else caption.upper()
+
+                # Calculate processing time correctly
+                processing_time = time.time() - start_time
+                logger.debug(f"Generated caption for {image_path} in {processing_time:.3f}s: {caption}")
+
+                return caption if caption else "Unable to generate meaningful caption"
+
+            except Exception as e:
+                logger.error(f"Error during caption generation for {image_path}: {e}")
+                return f"Caption generation failed: {str(e)}"
+
         except Exception as e:
             logger.error(f"Error generating caption for {image_path}: {e}")
             return f"Caption generation error: {str(e)}"
+    
+    def generate_surveillance_caption(self, image_path: str, detections: Dict = None, 
+                                    max_length: int = 60, num_beams: int = 4) -> Dict[str, Any]:
+        """
+        Generate a surveillance-focused caption that incorporates detected objects
+        
+        Args:
+            image_path: Path to the image file
+            detections: Optional detection results to enhance caption
+            max_length: Maximum caption length
+            num_beams: Number of beams for beam search
+            
+        Returns:
+            dict: Caption with metadata and processing info
+        """
+        start_time = time.time()
+        
+        try:
+            # Generate base caption
+            base_caption = self.generate_caption(image_path, max_length, num_beams)
+            
+            # Enhance with detection information if available
+            enhanced_caption = base_caption
+            context_info = []
+            
+            if detections and detections.get('detections'):
+                detected_objects = detections['detections']
+                
+                # Count objects by class
+                object_counts = {}
+                confidence_scores = []
+                
+                for detection in detected_objects:
+                    class_name = detection.get('class', 'object')
+                    confidence = detection.get('confidence', 0)
+                    object_counts[class_name] = object_counts.get(class_name, 0) + 1
+                    confidence_scores.append(confidence)
+                
+                # Create context string
+                if object_counts:
+                    object_descriptions = []
+                    for obj_class, count in object_counts.items():
+                        if count == 1:
+                            object_descriptions.append(f"a {obj_class}")
+                        else:
+                            object_descriptions.append(f"{count} {obj_class}s")
+                    
+                    if object_descriptions:
+                        objects_text = ", ".join(object_descriptions[:-1])
+                        if len(object_descriptions) > 1:
+                            objects_text += f" and {object_descriptions[-1]}"
+                        else:
+                            objects_text = object_descriptions[0]
+                        
+                        # Calculate average confidence
+                        avg_confidence = sum(confidence_scores) / len(confidence_scores)
+                        confidence_level = "high" if avg_confidence > 0.8 else "medium" if avg_confidence > 0.6 else "low"
+                        
+                        context_info.append(f"Scene contains {objects_text} (confidence: {confidence_level})")
+                        
+                        # Enhance base caption with detection context
+                        if "surveillance scene" in base_caption.lower() or "AI captioning system" in base_caption:
+                            enhanced_caption = f"Surveillance footage showing {objects_text}."
+                        else:
+                            enhanced_caption = f"{base_caption} The scene contains {objects_text}."
+            
+            processing_time = time.time() - start_time
+            
+            return {
+                'text': enhanced_caption,
+                'base_caption': base_caption,
+                'context_info': context_info,
+                'processing_time': processing_time,
+                'has_detections': bool(detections and detections.get('detections')),
+                'detection_count': len(detections.get('detections', [])) if detections else 0,
+                'image_path': image_path,
+                'timestamp': datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"Error generating surveillance caption: {e}")
+            return {
+                'text': f"Caption generation error: {str(e)}",
+                'base_caption': None,
+                'context_info': [],
+                'processing_time': time.time() - start_time,
+                'error': str(e),
+                'image_path': image_path,
+                'timestamp': datetime.now().isoformat()
+            }
+    
+    def batch_generate_captions(self, image_paths: List[str], 
+                              include_detections: bool = False,
+                              max_length: int = 50, 
+                              num_beams: int = 4) -> Dict[str, Any]:
+        """
+        Generate captions for multiple images efficiently
+        
+        Args:
+            image_paths: List of image paths
+            include_detections: Whether to enhance captions with detection context
+            max_length: Maximum caption length
+            num_beams: Number of beams for beam search
+            
+        Returns:
+            dict: Batch caption results with metadata
+        """
+        start_time = time.time()
+        results = []
+        
+        try:
+            logger.info(f"Starting batch caption generation for {len(image_paths)} images")
+            
+            for i, image_path in enumerate(image_paths):
+                try:
+                    logger.debug(f"Processing caption {i+1}/{len(image_paths)}: {image_path}")
+                    
+                    if include_detections:
+                        # Run detection first
+                        detections = self.detect_objects(image_path)
+                        caption_result = self.generate_surveillance_caption(
+                            image_path, detections, max_length, num_beams
+                        )
+                    else:
+                        caption = self.generate_caption(image_path, max_length, num_beams)
+                        caption_result = {
+                            'text': caption,
+                            'image_path': image_path,
+                            'processing_time': 0,  # Individual timing not tracked in batch
+                            'has_detections': False
+                        }
+                    
+                    results.append(caption_result)
+                    
+                except Exception as e:
+                    logger.error(f"Failed to caption {image_path}: {e}")
+                    results.append({
+                        'text': f"Error: {str(e)}",
+                        'image_path': image_path,
+                        'error': str(e),
+                        'processing_time': 0
+                    })
+            
+            processing_time = time.time() - start_time
+            
+            # Calculate summary statistics
+            successful_captions = [r for r in results if 'error' not in r]
+            failed_captions = len(results) - len(successful_captions)
+            
+            return {
+                'results': results,
+                'summary': {
+                    'total_images': len(image_paths),
+                    'successful': len(successful_captions),
+                    'failed': failed_captions,
+                    'success_rate': len(successful_captions) / len(image_paths) if image_paths else 0,
+                    'average_processing_time': processing_time / len(image_paths) if image_paths else 0
+                },
+                'processing_time': processing_time,
+                'timestamp': datetime.now().isoformat(),
+                'settings': {
+                    'max_length': max_length,
+                    'num_beams': num_beams,
+                    'include_detections': include_detections
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in batch caption generation: {e}")
+            return {
+                'results': results,
+                'error': str(e),
+                'processing_time': time.time() - start_time,
+                'timestamp': datetime.now().isoformat()
+            }
     
     def analyze_frame(self, 
                      frame_path: str, 
@@ -440,8 +794,12 @@ class VisionController(BaseController):
             
             # Generate caption if requested
             if include_caption:
-                caption_result = self.generate_caption(frame_path)
-                analysis_result['caption'] = caption_result
+                caption_text = self.generate_caption(frame_path)
+                analysis_result['caption'] = {
+                    'text': caption_text,
+                    'frame_path': frame_path,
+                    'timestamp': datetime.now().isoformat()
+                }
             else:
                 analysis_result['caption'] = None
             
@@ -450,11 +808,11 @@ class VisionController(BaseController):
             analysis_result['processing_time_seconds'] = (end_time - start_time).total_seconds()
             
             # Add summary statistics
-            if include_detections and 'detections' in analysis_result['detections']:
+            if include_detections and analysis_result['detections'] and 'detections' in analysis_result['detections']:
                 analysis_result['summary'] = {
                     'total_objects': analysis_result['detections']['total_objects'],
                     'unique_classes': len(set(d['class'] for d in analysis_result['detections']['detections'])),
-                    'has_caption': include_caption and bool(analysis_result['caption'].get('caption'))
+                    'has_caption': include_caption and analysis_result['caption'] is not None
                 }
             
             return analysis_result
@@ -578,7 +936,7 @@ class VisionController(BaseController):
             # Generate summary statistics
             successful_count = len(frame_paths) - failed_count
             total_objects = 0
-            unique_classes = set();
+            unique_classes = set()
             
             for result in results:
                 if (result.get('detections') and 
@@ -848,7 +1206,7 @@ class VisionController(BaseController):
                 import torch
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
-            except:
+            except Exception:
                 pass
                 
             self.models_loaded = False

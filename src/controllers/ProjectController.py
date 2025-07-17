@@ -1,6 +1,9 @@
-from .BaseController import BaseController
-from fastapi import UploadFile
-from models import ResponseSignal
+try:
+    # Try absolute imports first (for Celery running from project root)
+    from src.controllers.BaseController import BaseController
+except ImportError:
+    # Fall back to relative imports (for FastAPI running from src/)
+    from .BaseController import BaseController
 import os
 
 class ProjectController(BaseController):

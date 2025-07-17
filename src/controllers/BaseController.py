@@ -1,4 +1,10 @@
-from helpers.config import get_settings, Settings
+try:
+    # Try absolute imports first (for Celery running from project root)
+    from src.helpers.config import get_settings, Settings
+except ImportError:
+    # Fall back to relative imports (for FastAPI running from src/)
+    from helpers.config import get_settings, Settings
+
 import os
 import random
 import string

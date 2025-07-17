@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     FILE_MAX_SIZE: int = 500  # MB - larger for video files
     FILE_DEFAULT_CHUNK_SIZE: int = 1048576  # 1MB chunks for upload
 
-    JWT_SECRET_KEY: str
+    JWT_SECRET_KEY: str = '7jwklrMSIuJkQ2loH0e1mHhUEnN0Ighy5vDbPOmgxho'
 
     class Config:
         env_file = ".env"

@@ -113,7 +113,7 @@ dev: check-redis start-services
 start-services:
 	@echo "$(BLUE)🚀 Starting all services...$(NC)"
 	@trap 'echo "$(RED)🛑 Stopping services...$(NC)"; kill %1 %2 2>/dev/null; exit' INT; \
-	(cd $(SRC_DIR) && $(ACTIVATE) && python -m celery -A services.job_queue worker --loglevel=info) & \
+	($(ACTIVATE) && PYTHONPATH=$(shell pwd) python -m celery -A src.services.job_queue worker --loglevel=info) & \
 	sleep 3; \
 	(cd $(SRC_DIR) && $(ACTIVATE) && python -m uvicorn main:app --reload --host 0.0.0.0 --port $(API_PORT)) & \
 	wait
@@ -126,7 +126,7 @@ api: check-venv
 .PHONY: worker
 worker: check-venv check-redis
 	@echo "$(BLUE)⚙️  Starting Celery worker...$(NC)"
-	@cd $(SRC_DIR) && $(ACTIVATE) && python -m celery -A services.job_queue worker --loglevel=info
+	@$(ACTIVATE) && PYTHONPATH=$(shell pwd) python -m celery -A src.services.job_queue worker --loglevel=info
 
 .PHONY: redis
 redis:

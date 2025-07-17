@@ -1,5 +1,11 @@
-from .BaseController import BaseController
-from .VectorDBController import VectorDBController
+try:
+    # Try absolute imports first (for Celery running from project root)
+    from src.controllers.BaseController import BaseController
+    from src.controllers.VectorDBController import VectorDBController
+except ImportError:
+    # Fall back to relative imports (for FastAPI running from src/)
+    from .BaseController import BaseController
+    from .VectorDBController import VectorDBController
 import re
 import os
 

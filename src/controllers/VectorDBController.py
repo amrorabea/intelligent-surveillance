@@ -3,7 +3,12 @@ import os
 import logging
 from typing import Dict, List, Any, Optional
 from sentence_transformers import SentenceTransformer
-from .BaseController import BaseController
+try:
+    # Try absolute imports first (for Celery running from project root)
+    from src.controllers.BaseController import BaseController
+except ImportError:
+    # Fall back to relative imports (for FastAPI running from src/)
+    from .BaseController import BaseController
 
 logger = logging.getLogger(__name__)
 
