@@ -13,11 +13,15 @@ import logging
 logger = logging.getLogger(__name__)
 
 class QueryController(BaseController):
-    def __init__(self, project_id: str):
+    def __init__(self, project_id: str = None):
         """Initialize query controller with vector database connection"""
         super().__init__()
 
-        self.collection_name = 'surveillance_'+project_id
+        # Handle None or empty project_id
+        if not project_id:
+            project_id = "default"
+        
+        self.collection_name = f'surveillance_{project_id}'
         self.vector_db = VectorDBController(collection_name=self.collection_name)
         
     def process_query(self, query_text, max_results=10, project_id=None):
@@ -48,13 +52,34 @@ class QueryController(BaseController):
         for result in search_results:
             metadata = result.get('metadata', {})
             
+            # Calculate similarity score (ChromaDB uses distance, lower = more similar)
+            distance = result.get('distance', 1.0)
+            similarity_score = max(0.0, 1.0 - distance) if distance is not None else 0.0
+            
+            # Handle detected_objects - ensure it's a list
+            detected_objects = metadata.get('detected_objects', [])
+            if isinstance(detected_objects, str):
+                # If it's a string, split it into a list
+                if detected_objects:
+                    detected_objects = [obj.strip() for obj in detected_objects.split(',') if obj.strip()]
+                else:
+                    detected_objects = []
+            elif not isinstance(detected_objects, list):
+                # If it's neither string nor list, make it an empty list
+                detected_objects = []
+            
+            # Ensure all metadata values are properly typed
             processed_results.append({
-                'id': result['id'],
-                'caption': result['document'],
-                'file_id': metadata.get('file_id', 'unknown'),
-                'timestamp': metadata.get('timestamp', 0),
-                'frame_path': metadata.get('frame_path', None),
-                'score': 1.0 - (result.get('distance', 0) if result.get('distance') else 0)
+                'id': str(result['id']),
+                'caption': str(result['document']) if result.get('document') else 'No caption available',
+                'file_id': str(metadata.get('file_id', 'unknown')),
+                'video_filename': str(metadata.get('video_filename', metadata.get('filename', 'unknown'))),
+                'project_id': str(metadata.get('project_id', 'unknown')),
+                'timestamp': float(metadata.get('timestamp', 0)),
+                'frame_number': str(metadata.get('frame_number', 'unknown')),
+                'frame_path': str(metadata.get('frame_path', '')) if metadata.get('frame_path') else '',
+                'detected_objects': detected_objects,
+                'score': float(similarity_score)
             })
             
         return {
@@ -108,26 +133,63 @@ class QueryController(BaseController):
         
     def get_frame_for_result(self, result_id):
         """
-        Retrieve the actual frame image for a search result
+        Retrieve the actual frame image path for a search result
         
         Args:
             result_id (str): Result ID from search results
             
         Returns:
-            str: Path to the frame image file
+            str: Path to the frame image file, or None if not found
         """
-        # Get the detailed result from vector DB
-        results = self.vector_db.semantic_search(
-            query="",  # Empty query for exact ID match
-            filter_criteria={"id": result_id},
-            limit=1
-        )
-        
-        if results and len(results) > 0:
-            metadata = results[0].get('metadata', {})
-            frame_path = metadata.get('frame_path')
+        try:
+            # Try to get the document by ID from vector database
+            all_docs = self.vector_db.collection.get(
+                ids=[result_id],
+                include=['metadatas']
+            )
             
-            if frame_path and os.path.exists(frame_path):
-                return frame_path
+            if all_docs and all_docs['ids'] and len(all_docs['ids']) > 0:
+                metadata = all_docs['metadatas'][0] if all_docs['metadatas'] else {}
+                frame_path = metadata.get('frame_path')
                 
-        return None
+                logger.info(f"Found frame path for {result_id}: {frame_path}")
+                
+                # Try the direct path first
+                if frame_path and os.path.exists(frame_path):
+                    return frame_path
+                
+                # If direct path doesn't work, try to construct alternative paths
+                if frame_path:
+                    # Extract filename from path
+                    frame_filename = os.path.basename(frame_path)
+                    
+                    # Try common locations
+                    base_dirs = [
+                        "/home/amro/Desktop/intelligent-surveillance/src/assets/files",
+                        "/home/amro/Desktop/intelligent-surveillance/assets/files",
+                        os.path.dirname(frame_path)  # Try original directory
+                    ]
+                    
+                    project_id = metadata.get('project_id', 'test')
+                    
+                    for base_dir in base_dirs:
+                        potential_paths = [
+                            os.path.join(base_dir, project_id, "frames", frame_filename),
+                            os.path.join(base_dir, "test", "frames", frame_filename),
+                            os.path.join(base_dir, "frames", frame_filename),
+                        ]
+                        
+                        for path in potential_paths:
+                            if os.path.exists(path):
+                                logger.info(f"Found alternative frame path: {path}")
+                                return path
+                
+                logger.warning(f"Frame path does not exist: {frame_path}")
+            else:
+                logger.warning(f"No metadata found for result ID: {result_id}")
+                
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error getting frame for result {result_id}: {e}")
+            return None

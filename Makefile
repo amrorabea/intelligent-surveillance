@@ -45,6 +45,7 @@ help:
 	@echo ""
 	@echo "$(GREEN)Utility Commands:$(NC)"
 	@echo "  status          - Check system status"
+	@echo "  status-fullstack - Check full stack system status"
 	@echo "  logs            - Show application logs"
 	@echo "  clean           - Clean up temporary files"
 	@echo "  reset           - Reset project (clean + setup)"
@@ -300,17 +301,25 @@ frontend-install: check-venv
 fullstack: check-redis
 	@echo "$(BLUE)🚀 Starting full surveillance system (backend + frontend)...$(NC)"
 	@echo "$(YELLOW)This will start all services. Press Ctrl+C to stop all.$(NC)"
-	@# Start backend services in background
-	$(MAKE) dev-background
-	@sleep 5
-	@# Start frontend in foreground
-	$(MAKE) frontend
+	@trap 'echo "$(RED)🛑 Stopping all services...$(NC)"; pkill -f "uvicorn main:app" 2>/dev/null; pkill -f "celery.*worker" 2>/dev/null; pkill -f "streamlit run" 2>/dev/null; exit' INT; \
+	echo "$(BLUE)🔧 Starting Redis...$(NC)"; \
+	sudo systemctl start redis-server; \
+	sleep 2; \
+	echo "$(BLUE)⚙️  Starting Celery worker...$(NC)"; \
+	($(ACTIVATE) && PYTHONPATH=$(shell pwd) python -m celery -A src.services.job_queue worker --loglevel=info) & \
+	sleep 3; \
+	echo "$(BLUE)🌐 Starting FastAPI server...$(NC)"; \
+	(cd $(SRC_DIR) && $(ACTIVATE) && python -m uvicorn main:app --reload --host 0.0.0.0 --port $(API_PORT)) & \
+	sleep 3; \
+	echo "$(BLUE)🎨 Starting Streamlit frontend...$(NC)"; \
+	(cd streamlit && $(ACTIVATE) && streamlit run app.py --server.port=8501 --server.address=0.0.0.0) & \
+	wait
 
 .PHONY: dev-background
 dev-background: check-redis
 	@echo "$(BLUE)🔧 Starting backend services in background...$(NC)"
-	cd $(SRC_DIR) && $(ACTIVATE) && celery -A services.job_queue worker --loglevel=info --detach
-	cd $(SRC_DIR) && $(ACTIVATE) && uvicorn main:app --host 0.0.0.0 --port $(API_PORT) --reload &
+	@$(ACTIVATE) && PYTHONPATH=$(shell pwd) python -m celery -A src.services.job_queue worker --loglevel=info --detach
+	@cd $(SRC_DIR) && $(ACTIVATE) && python -m uvicorn main:app --host 0.0.0.0 --port $(API_PORT) --reload &
 	@echo "$(GREEN)✅ Backend services started in background$(NC)"
 	@echo "$(YELLOW)📊 API: http://localhost:$(API_PORT)$(NC)"
 	@echo "$(YELLOW)📊 Docs: http://localhost:$(API_PORT)/docs$(NC)"
@@ -326,6 +335,40 @@ frontend-dev: frontend-install frontend
 status-full: status
 	@echo ""
 	@echo "$(BLUE)🎨 Frontend Status:$(NC)"
+	@if curl -s http://localhost:8501 >/dev/null 2>&1; then \
+		echo "$(GREEN)✅ Streamlit frontend running on http://localhost:8501$(NC)"; \
+	else \
+		echo "$(RED)❌ Streamlit frontend not running$(NC)"; \
+	fi
+
+.PHONY: status-fullstack
+status-fullstack:
+	@echo "$(BLUE)📊 Full Stack System Status$(NC)"
+	@echo ""
+	@echo "$(YELLOW)Redis Status:$(NC)"
+	@if systemctl is-active --quiet redis-server; then \
+		echo "$(GREEN)✅ Redis is running$(NC)"; \
+		redis-cli ping 2>/dev/null | grep -q PONG && echo "$(GREEN)✅ Redis responding$(NC)" || echo "$(RED)❌ Redis not responding$(NC)"; \
+	else \
+		echo "$(RED)❌ Redis is not running$(NC)"; \
+	fi
+	@echo ""
+	@echo "$(YELLOW)Backend API:$(NC)"
+	@if curl -s http://localhost:$(API_PORT)/health >/dev/null 2>&1; then \
+		echo "$(GREEN)✅ FastAPI server running on http://localhost:$(API_PORT)$(NC)"; \
+		echo "$(GREEN)✅ API Docs: http://localhost:$(API_PORT)/docs$(NC)"; \
+	else \
+		echo "$(RED)❌ FastAPI server not responding$(NC)"; \
+	fi
+	@echo ""
+	@echo "$(YELLOW)Celery Worker:$(NC)"
+	@if pgrep -f "celery.*worker" >/dev/null 2>&1; then \
+		echo "$(GREEN)✅ Celery worker is running$(NC)"; \
+	else \
+		echo "$(RED)❌ Celery worker not running$(NC)"; \
+	fi
+	@echo ""
+	@echo "$(YELLOW)Frontend:$(NC)"
 	@if curl -s http://localhost:8501 >/dev/null 2>&1; then \
 		echo "$(GREEN)✅ Streamlit frontend running on http://localhost:8501$(NC)"; \
 	else \
