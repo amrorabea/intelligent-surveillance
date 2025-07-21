@@ -7,7 +7,6 @@ import time
 import logging
 import uuid
 from contextlib import asynccontextmanager
-import asyncio
 
 from routes import base, data, surveillance
 from models.database import db_manager

@@ -9,8 +9,6 @@ except ImportError:
 class TrackingController(BaseController):
     def __init__(self):
         super().__init__()
-        # Use detection-based tracking instead of OpenCV trackers
-        # This is more reliable and doesn't depend on specific OpenCV versions
         self.tracks = {}  # Store active tracks: {track_id: last_bbox}
         self.next_id = 0
         self.tracking_history = {}  # Store tracking history for each object

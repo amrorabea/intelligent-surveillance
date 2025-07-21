@@ -31,6 +31,8 @@ help:
 	@echo ""
 	@echo "$(GREEN)Development Commands:$(NC)"
 	@echo "  dev             - Start all services for development (Redis + Celery + API)"
+	@echo "  frontend        - Start Streamlit frontend"
+	@echo "  fullstack       - Start backend + frontend together"
 	@echo "  api             - Start FastAPI server only"
 	@echo "  worker          - Start Celery worker only"
 	@echo "  redis           - Start Redis server"
@@ -279,6 +281,88 @@ restart: stop dev
 .PHONY: update
 update: install
 	@echo "$(GREEN)✅ Dependencies updated$(NC)"
+
+# ============================================================================
+# Frontend Commands
+# ============================================================================
+
+.PHONY: frontend
+frontend: check-venv
+	@echo "$(BLUE)🎨 Starting Streamlit frontend...$(NC)"
+	cd streamlit && $(ACTIVATE) && streamlit run app.py --server.port=8501 --server.address=0.0.0.0
+
+.PHONY: frontend-install
+frontend-install: check-venv
+	@echo "$(BLUE)📦 Installing frontend dependencies...$(NC)"
+	cd streamlit && $(ACTIVATE) && pip install -r requirements.txt
+
+.PHONY: fullstack
+fullstack: check-redis
+	@echo "$(BLUE)🚀 Starting full surveillance system (backend + frontend)...$(NC)"
+	@echo "$(YELLOW)This will start all services. Press Ctrl+C to stop all.$(NC)"
+	@# Start backend services in background
+	$(MAKE) dev-background
+	@sleep 5
+	@# Start frontend in foreground
+	$(MAKE) frontend
+
+.PHONY: dev-background
+dev-background: check-redis
+	@echo "$(BLUE)🔧 Starting backend services in background...$(NC)"
+	cd $(SRC_DIR) && $(ACTIVATE) && celery -A services.job_queue worker --loglevel=info --detach
+	cd $(SRC_DIR) && $(ACTIVATE) && uvicorn main:app --host 0.0.0.0 --port $(API_PORT) --reload &
+	@echo "$(GREEN)✅ Backend services started in background$(NC)"
+	@echo "$(YELLOW)📊 API: http://localhost:$(API_PORT)$(NC)"
+	@echo "$(YELLOW)📊 Docs: http://localhost:$(API_PORT)/docs$(NC)"
+
+.PHONY: frontend-dev
+frontend-dev: frontend-install frontend
+
+# ============================================================================
+# Enhanced Status Commands
+# ============================================================================
+
+.PHONY: status-full
+status-full: status
+	@echo ""
+	@echo "$(BLUE)🎨 Frontend Status:$(NC)"
+	@if curl -s http://localhost:8501 >/dev/null 2>&1; then \
+		echo "$(GREEN)✅ Streamlit frontend running on http://localhost:8501$(NC)"; \
+	else \
+		echo "$(RED)❌ Streamlit frontend not running$(NC)"; \
+	fi
+
+.PHONY: open-frontend
+open-frontend:
+	@echo "$(BLUE)🌐 Opening frontend in browser...$(NC)"
+	@if command -v xdg-open >/dev/null 2>&1; then \
+		xdg-open http://localhost:8501; \
+	elif command -v open >/dev/null 2>&1; then \
+		open http://localhost:8501; \
+	else \
+		echo "$(YELLOW)Please open http://localhost:8501 in your browser$(NC)"; \
+	fi
+
+.PHONY: open-docs
+open-docs:
+	@echo "$(BLUE)📚 Opening API documentation in browser...$(NC)"
+	@if command -v xdg-open >/dev/null 2>&1; then \
+		xdg-open http://localhost:$(API_PORT)/docs; \
+	elif command -v open >/dev/null 2>&1; then \
+		open http://localhost:$(API_PORT)/docs; \
+	else \
+		echo "$(YELLOW)Please open http://localhost:$(API_PORT)/docs in your browser$(NC)"; \
+	fi
+
+# ============================================================================
+# Stop Commands Enhanced
+# ============================================================================
+
+.PHONY: stop-all
+stop-all: stop
+	@echo "$(BLUE)🛑 Stopping frontend services...$(NC)"
+	@pkill -f "streamlit run" 2>/dev/null || true
+	@echo "$(GREEN)✅ All services stopped$(NC)"
 
 # Make all targets silent by default
 .SILENT:

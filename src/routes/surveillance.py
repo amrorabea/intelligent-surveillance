@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.responses import FileResponse
 from typing import Optional, List
 import os
@@ -6,11 +6,9 @@ import logging
 from datetime import datetime
 
 from helpers.config import get_settings, Settings
-from controllers.ProcessController import ProcessController
 from controllers.QueryController import QueryController
-from controllers.ProjectController import ProjectController
 from models.schemas import (
-    ProcessVideoRequest, ProcessVideoResponse, QueryResponse,
+    QueryResponse,
     ProcessingJobResponse, SystemHealthResponse, AnalyticsResponse,
     APIResponse
 )
@@ -25,82 +23,6 @@ surveillance_router = APIRouter(
     dependencies=[Depends(check_rate_limit)]
 )
 
-# Video Processing Endpoints
-@surveillance_router.post("/process/{project_id}/{file_id}", response_model=ProcessVideoResponse)
-async def process_surveillance_video(
-    project_id: str, 
-    file_id: str,
-    request: ProcessVideoRequest = ProcessVideoRequest(),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
-    user: dict = Depends(get_optional_user),  # Changed from get_current_user
-    app_settings: Settings = Depends(get_settings)
-):
-    """
-    Process a surveillance video through the AI pipeline (background job)
-    """
-    try:
-        # Comment out project access verification for testing
-        # await verify_project_access(project_id, user)
-        
-        # Validate file exists
-        project_path = ProjectController().get_project_path(project_id)
-        file_path = os.path.join(project_path, file_id)
-        
-        if not os.path.exists(file_path):
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"File {file_id} not found in project {project_id}"
-            )
-        
-        # Validate it's a video file
-        process_controller = ProcessController(project_id=project_id)
-        if not process_controller.is_video_file(file_id):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"File {file_id} is not a supported video format"
-            )
-        
-        # Submit background job
-        job_id = job_manager.submit_video_processing_job(
-            project_id=project_id,
-            file_id=file_id,
-            sample_rate=request.sample_rate,
-            detection_threshold=request.detection_threshold,
-            enable_tracking=request.enable_tracking,
-            enable_captioning=request.enable_captioning
-        )
-        
-        # Estimate frames for progress tracking
-        try:
-            import cv2
-            video = cv2.VideoCapture(file_path)
-            fps = video.get(cv2.CAP_PROP_FPS)
-            frame_count = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
-            estimated_frames = int(frame_count / (fps / request.sample_rate)) if fps > 0 else 0
-            video.release()
-        except Exception:
-            estimated_frames = None
-        
-        logger.info(f"Started video processing job {job_id} for {project_id}/{file_id}")
-        
-        return ProcessVideoResponse(
-            success=True,
-            job_id=job_id,
-            message="Video processing started",
-            project_id=project_id,
-            file_id=file_id,
-            estimated_frames=estimated_frames
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error starting video processing: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to start video processing: {str(e)}"
-        )
-
 # Job Management Endpoints
 @surveillance_router.get("/jobs/{project_id}", response_model=List[ProcessingJobResponse])
 async def get_processing_jobs(
@@ -113,7 +35,7 @@ async def get_processing_jobs(
         # Comment out project access verification for testing
         # await verify_project_access(project_id, user)
         
-        # TODO: Get jobs from database
+        # TODO: Issue: Problem happens when there is an actual job running
         # For now, get active jobs from job manager
         active_jobs = job_manager.get_active_jobs()
         
@@ -203,18 +125,18 @@ async def query_surveillance(
     start_time: Optional[float] = Query(None, description="Start timestamp filter"),
     end_time: Optional[float] = Query(None, description="End timestamp filter"),
     min_confidence: Optional[float] = Query(None, ge=0, le=1, description="Minimum confidence"),
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(get_optional_user),
     app_settings: Settings = Depends(get_settings)
 ):
     """Query surveillance footage using natural language"""
     try:
         start_time_query = datetime.utcnow()
         
-        if project_id:
-            await verify_project_access(project_id, user)
+        # if project_id:
+        #     await verify_project_access(project_id, user)
         
         # Initialize query controller
-        query_controller = QueryController()
+        query_controller = QueryController(project_id=project_id)
         
         # Execute query
         results = query_controller.process_query(
@@ -223,6 +145,8 @@ async def query_surveillance(
             project_id=project_id
         )
         
+        logger.info(f"Results for query: {results}")
+
         # Calculate processing time
         processing_time = (datetime.utcnow() - start_time_query).total_seconds()
         
@@ -303,7 +227,7 @@ async def get_frame(
     """Get a specific frame from query results"""
     try:
         # Initialize query controller
-        query_controller = QueryController()
+        query_controller = QueryController(project_id='surveillance_data')
         
         # Get frame path
         frame_path = query_controller.get_frame_for_result(result_id)

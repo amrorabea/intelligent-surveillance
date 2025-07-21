@@ -17,7 +17,6 @@ class VectorDBController(BaseController):
         super().__init__()
         
         # Disable telemetry to avoid errors
-        import os
         os.environ["ANONYMIZED_TELEMETRY"] = "False"
         
         self.collection_name = collection_name
@@ -47,7 +46,6 @@ class VectorDBController(BaseController):
     def _initialize_encoder(self):
         """Initialize sentence transformer encoder"""
         try:
-            # TODO: You may want to use a different embedding model
             self.encoder = SentenceTransformer('all-MiniLM-L6-v2')
             logger.info("Sentence transformer encoder loaded successfully")
         except Exception as e:

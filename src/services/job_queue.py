@@ -146,13 +146,7 @@ class JobManager:
                     logger.warning(f"Could not get detailed status for job {job_id}: {e}")
                     status_info['error'] = f'Status retrieval failed: {str(e)}'
             
-            # Try to get progress info if available
-            try:
-                if hasattr(result, 'info') and result.info and isinstance(result.info, dict):
-                    status_info.update(result.info)
-            except Exception:
-                pass  # Ignore progress info errors
-            
+            logger.info(f"JOB STATUS: {status_info}")
             return status_info
             
         except Exception as e:
@@ -253,19 +247,14 @@ def process_video_task(self, project_id: str, file_id: str, sample_rate: float,
         }
         
         # Add minimal analytics to avoid serialization issues
-        analytics = result.get('analytics', {})
-        if analytics:
-            success_result['analytics'] = {
-                'total_detections': int(analytics.get('total_detections', 0)),
-                'unique_objects': len(analytics.get('object_summary', {}))
-            }
+        success_result['analytics'] = result.get('analytics', {})
         
         logger.info(f"[{task_id}] Video processing completed successfully: {success_result['processed_frames']} frames in {processing_time:.2f}s")
         
         return success_result
         
     except Exception as e:
-        processing_time = time.time() - start_time
+        processing_time = time.time() - start_time 
         error_msg = str(e)[:200]  # Limit error message length
         
         logger.error(f"[{task_id}] Video processing failed: {error_msg}", exc_info=True)

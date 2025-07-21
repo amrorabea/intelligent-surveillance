@@ -8,12 +8,17 @@ except ImportError:
     from .VectorDBController import VectorDBController
 import re
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 class QueryController(BaseController):
-    def __init__(self):
+    def __init__(self, project_id: str):
         """Initialize query controller with vector database connection"""
         super().__init__()
-        self.vector_db = VectorDBController(collection_name="surveillance_data")
+
+        self.collection_name = 'surveillance_'+project_id
+        self.vector_db = VectorDBController(collection_name=self.collection_name)
         
     def process_query(self, query_text, max_results=10, project_id=None):
         """
@@ -37,6 +42,7 @@ class QueryController(BaseController):
             filter_criteria=filters
         )
         
+        logger.info(f"Search results for query: {search_results}")
         # Extract frame paths and timestamps
         processed_results = []
         for result in search_results:

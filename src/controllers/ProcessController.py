@@ -266,7 +266,7 @@ class ProcessController(BaseController):
                     if enable_captioning:
                         caption_start = time.time()
                         # Use surveillance-focused captioning with detection context
-                        caption_result = vision_controller.generate_surveillance_caption(frame_path, detections)
+                        caption_result = vision_controller.generate_surveillance_caption(image_path=frame_path, detections=detections, new_tracks=tracking_results['new_tracks'])
                         caption = caption_result.get('text', '') if isinstance(caption_result, dict) else str(caption_result)
                         caption_time = time.time() - caption_start
                         performance_metrics["caption_times"].append(caption_time)
@@ -329,7 +329,7 @@ class ProcessController(BaseController):
             
             # Step 4: Generate comprehensive analytics and final results
             processing_time = time.time() - start_time
-            
+
             result.update({
                 "status": "completed",
                 "end_time": datetime.now().isoformat(),

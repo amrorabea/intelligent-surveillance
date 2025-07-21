@@ -6,8 +6,6 @@ This module handles all AI-powered computer vision tasks including:
 - Image captioning using BLIP
 - Frame analysis and batch processing
 - Model management and inference
-
-All AI model implementations are marked as TODOs for user implementation.
 """
 
 import os
@@ -55,7 +53,7 @@ class VisionController(BaseController):
         self.max_detections = max_detections
         self.model_cache_dir = model_cache_dir or os.path.join(self.base_dir, 'models')
         
-        # Model instances (to be implemented)
+        # Model instances
         self.yolo_model = None
         self.caption_processor = None
         self.caption_model = None
@@ -75,7 +73,6 @@ class VisionController(BaseController):
         Initialize and load AI models for computer vision tasks.
         
         This method sets up model paths, checks availability, and loads models.
-        All actual model loading is marked as TODO for user implementation.
         """
         try:
             logger.info("Initializing computer vision models...")
@@ -299,7 +296,7 @@ class VisionController(BaseController):
                     'error': 'No cached model files found',
                     'cache_dir': cache_dir
                 }
-                return
+                return # Failed - Not loaded
             
         except Exception as e:
             logger.error(f"Failed to setup BLIP caption model: {e}")
@@ -569,7 +566,7 @@ class VisionController(BaseController):
             return f"Caption generation error: {str(e)}"
     
     def generate_surveillance_caption(self, image_path: str, detections: Dict = None, 
-                                    max_length: int = 60, num_beams: int = 4) -> Dict[str, Any]:
+                                    max_length: int = 60, num_beams: int = 4, new_tracks = None) -> Dict[str, Any]:
         """
         Generate a surveillance-focused caption that incorporates detected objects
         
@@ -585,8 +582,11 @@ class VisionController(BaseController):
         start_time = time.time()
         
         try:
-            # Generate base caption
-            base_caption = self.generate_caption(image_path, max_length, num_beams)
+            # Generate base caption if there are new tracks
+            if new_tracks:
+                base_caption = self.generate_caption(image_path, max_length, num_beams)
+            else:
+                base_caption = ""
             
             # Enhance with detection information if available
             enhanced_caption = base_caption
@@ -657,92 +657,7 @@ class VisionController(BaseController):
                 'image_path': image_path,
                 'timestamp': datetime.now().isoformat()
             }
-    
-    def batch_generate_captions(self, image_paths: List[str], 
-                              include_detections: bool = False,
-                              max_length: int = 50, 
-                              num_beams: int = 4) -> Dict[str, Any]:
-        """
-        Generate captions for multiple images efficiently
-        
-        Args:
-            image_paths: List of image paths
-            include_detections: Whether to enhance captions with detection context
-            max_length: Maximum caption length
-            num_beams: Number of beams for beam search
-            
-        Returns:
-            dict: Batch caption results with metadata
-        """
-        start_time = time.time()
-        results = []
-        
-        try:
-            logger.info(f"Starting batch caption generation for {len(image_paths)} images")
-            
-            for i, image_path in enumerate(image_paths):
-                try:
-                    logger.debug(f"Processing caption {i+1}/{len(image_paths)}: {image_path}")
-                    
-                    if include_detections:
-                        # Run detection first
-                        detections = self.detect_objects(image_path)
-                        caption_result = self.generate_surveillance_caption(
-                            image_path, detections, max_length, num_beams
-                        )
-                    else:
-                        caption = self.generate_caption(image_path, max_length, num_beams)
-                        caption_result = {
-                            'text': caption,
-                            'image_path': image_path,
-                            'processing_time': 0,  # Individual timing not tracked in batch
-                            'has_detections': False
-                        }
-                    
-                    results.append(caption_result)
-                    
-                except Exception as e:
-                    logger.error(f"Failed to caption {image_path}: {e}")
-                    results.append({
-                        'text': f"Error: {str(e)}",
-                        'image_path': image_path,
-                        'error': str(e),
-                        'processing_time': 0
-                    })
-            
-            processing_time = time.time() - start_time
-            
-            # Calculate summary statistics
-            successful_captions = [r for r in results if 'error' not in r]
-            failed_captions = len(results) - len(successful_captions)
-            
-            return {
-                'results': results,
-                'summary': {
-                    'total_images': len(image_paths),
-                    'successful': len(successful_captions),
-                    'failed': failed_captions,
-                    'success_rate': len(successful_captions) / len(image_paths) if image_paths else 0,
-                    'average_processing_time': processing_time / len(image_paths) if image_paths else 0
-                },
-                'processing_time': processing_time,
-                'timestamp': datetime.now().isoformat(),
-                'settings': {
-                    'max_length': max_length,
-                    'num_beams': num_beams,
-                    'include_detections': include_detections
-                }
-            }
-            
-        except Exception as e:
-            logger.error(f"Error in batch caption generation: {e}")
-            return {
-                'results': results,
-                'error': str(e),
-                'processing_time': time.time() - start_time,
-                'timestamp': datetime.now().isoformat()
-            }
-    
+
     def analyze_frame(self, 
                      frame_path: str, 
                      include_caption: bool = True,
