@@ -565,7 +565,9 @@ async def get_general_analytics(
     """Get general analytics across all projects"""
     try:
         # Get analytics using available controllers
+        # Create ONE VectorDBController instance and reuse it for all collections
         vector_controller = VectorDBController()
+        logger.info("Heavy analytics mode - sentence transformer model will be loaded")
         
         # Get all available data from vector database
         try:
@@ -580,18 +582,20 @@ async def get_general_analytics(
                     if collection.name.startswith('surveillance_') and collection.count() > 0:
                         logger.info(f"Checking collection {collection.name} with {collection.count()} documents")
                         
-                        # Create a temporary VectorDBController for this collection
-                        temp_controller = VectorDBController(collection_name=collection.name)
-                        
-                        # Get data from this collection
-                        collection_results = temp_controller.semantic_search(
-                            query="object detection analysis surveillance",
-                            limit=1000,
-                            filter_criteria=None
-                        )
-                        
-                        all_results.extend(collection_results)
-                        logger.info(f"Got {len(collection_results)} results from {collection.name}")
+                        # Switch to this collection WITHOUT creating a new controller
+                        # This avoids reloading the sentence transformer model
+                        if vector_controller.switch_collection(collection.name):
+                            # Get data from this collection using the existing controller
+                            collection_results = vector_controller.semantic_search(
+                                query="object detection analysis surveillance",
+                                limit=1000,
+                                filter_criteria=None
+                            )
+                            
+                            all_results.extend(collection_results)
+                            logger.info(f"Got {len(collection_results)} results from {collection.name}")
+                        else:
+                            logger.warning(f"Failed to switch to collection {collection.name}")
             
             query_results = all_results
         except Exception as e:
@@ -734,6 +738,108 @@ async def get_general_analytics(
                 "search_analytics": {"total_searches": 0, "avg_results": 0, "avg_search_time": 0, "popular_terms": []},
                 "insights": [{"title": "No Data", "description": "No analytics data available yet", "confidence": 0.5}],
                 "alerts": [{"type": "info", "title": "System Status", "message": f"Analytics system error: {str(e)}", "timestamp": datetime.utcnow().isoformat()}]
+            }
+        }
+
+# Lightweight Analytics Endpoint
+@surveillance_router.get("/analytics/light", response_model=Dict[str, Any])
+async def get_light_analytics(
+    user: dict = Depends(get_current_user)
+):
+    """Get lightweight analytics without loading sentence transformer models"""
+    try:
+        logger.info("Getting light analytics (no model loading)")
+        
+        # Get basic collection information WITHOUT creating VectorDBController
+        # This avoids any potential sentence transformer loading
+        collection_stats = []
+        total_documents = 0
+        total_collections = 0
+        active_collections = 0
+        client_available = False
+        
+        try:
+            # Import chromadb directly and create a simple client
+            import chromadb
+            import os
+            from helpers.config import get_settings
+            
+            # Get the database directory from settings
+            settings = get_settings()
+            db_dir = os.path.join(settings.files_directory, "chromadb")
+            
+            # Create a direct chromadb client
+            client = chromadb.PersistentClient(path=db_dir)
+            client_available = True
+            logger.info(f"Direct ChromaDB client created for light analytics")
+            
+            # Get collections without loading any models
+            collections = client.list_collections()
+            logger.info(f"Found {len(collections)} collections for light analytics")
+            
+            for collection in collections:
+                if collection.name.startswith('surveillance_'):
+                    try:
+                        count = collection.count()
+                        stats = {
+                            "name": collection.name,
+                            "count": count,
+                            "available": True
+                        }
+                        collection_stats.append(stats)
+                        total_documents += count
+                        total_collections += 1
+                        if count > 0:
+                            active_collections += 1
+                    except Exception as e:
+                        logger.warning(f"Failed to get stats for collection '{collection.name}': {e}")
+                        stats = {
+                            "name": collection.name,
+                            "count": 0,
+                            "available": False,
+                            "error": str(e)
+                        }
+                        collection_stats.append(stats)
+                        total_collections += 1
+                            
+        except Exception as e:
+            logger.warning(f"Failed to get collection stats: {e}")
+            client_available = False
+        
+        # Create lightweight analytics response
+        analytics_data = {
+            "total_collections": total_collections,
+            "active_collections": active_collections,
+            "total_documents": total_documents,
+            "collection_stats": collection_stats,
+            "system_health": {
+                "vector_db_available": client_available,
+                "collections_accessible": len(collection_stats) > 0,
+                "mode": "light"
+            },
+            "performance_note": "Light mode - heavy analytics disabled to prevent model loading",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+        return {"success": True, "data": analytics_data}
+        
+    except Exception as e:
+        logger.error(f"Error getting light analytics: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "data": {
+                "total_collections": 0,
+                "active_collections": 0,
+                "total_documents": 0,
+                "collection_stats": [],
+                "system_health": {
+                    "vector_db_available": False,
+                    "collections_accessible": False,
+                    "mode": "light"
+                },
+                "performance_note": "Light mode - analytics unavailable",
+                "timestamp": datetime.utcnow().isoformat()
             }
         }
 

@@ -10,8 +10,84 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 # Try to import API client for status checks
 try:
-    sys.path.append(os.path.join(os.path.dirname(__file__)))
-    from utils.api_client import SurveillanceAPIClient
+    sys.path.append(os.path.join(os.path.dirname(__fi# Technology & Integration section
+st.markdown("### 🛠️ Technology Stack")
+
+tech_col1, tech_col2, tech_col3 = st.columns(3)
+
+with tech_col1:
+    st.markdown("""
+    <div class="info-card">
+        <h4>🤖 AI Models</h4>
+        <p><strong>YOLOv8:</strong> Real-time object detection</p>
+        <p><strong>BLIP:</strong> Image captioning & search</p>
+        <p><strong>Custom Training:</strong> Domain-specific optimization</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+with tech_col2:
+    st.markdown("""
+    <div class="info-card">
+        <h4>🔧 Backend</h4>
+        <p><strong>FastAPI:</strong> High-performance API</p>
+        <p><strong>PostgreSQL:</strong> Reliable data storage</p>
+        <p><strong>Redis:</strong> Caching & job queues</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+with tech_col3:
+    st.markdown("""
+    <div class="info-card">
+        <h4>🎨 Frontend</h4>
+        <p><strong>Streamlit:</strong> Interactive interface</p>
+        <p><strong>Real-time:</strong> Live status updates</p>
+        <p><strong>Responsive:</strong> Mobile-friendly design</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+# Demo and getting started section
+st.markdown("---")
+
+# Create two main sections
+demo_col, start_col = st.columns(2)
+
+with demo_col:
+    st.markdown("### 🎭 Demo Mode")
+    st.info("**Perfect for presentations and testing!**")
+    st.markdown("""
+    **Features:**
+    - ✅ No backend required
+    - ✅ Sample data and analytics
+    - ✅ Full UI demonstration
+    - ✅ Interactive examples
+    """)
+    
+    if st.button("🚀 Explore Demo Features", use_container_width=True):
+        st.success("Navigate to any page and click the demo buttons!")
+
+with start_col:
+    st.markdown("### 🚀 Production Mode")
+    if st.session_state.system_status == 'online':
+        st.success("**Backend is ready!**")
+        st.markdown("""
+        **Ready to use:**
+        - ✅ Real-time processing
+        - ✅ Live analytics
+        - ✅ Full functionality
+        - ✅ Data persistence
+        """)
+    else:
+        st.warning("**Backend required for full functionality**")
+        st.markdown("""
+        **To enable:**
+        - 🔧 Start the FastAPI backend
+        - 🔧 Ensure database connection
+        - 🔧 Load AI models
+        - 🔧 Check system status
+        """)
+    
+    if st.button("🔧 Check System Status", use_container_width=True):
+        st.rerun()m utils.api_client import SurveillanceAPIClient
     API_AVAILABLE = True
 except ImportError:
     API_AVAILABLE = False
@@ -254,10 +330,10 @@ def check_system_status():
         return False
     
     try:
-        # Use the actual health endpoint
-        import requests
-        response = requests.get("http://localhost:5000/api/surveillance/health", timeout=5)
-        return response.status_code == 200
+        api_client = SurveillanceAPIClient()
+        # Try a simple health check endpoint
+        response = api_client.get_database_stats()
+        return response.get("success", False)
     except Exception:
         return False
 
@@ -299,248 +375,70 @@ with header_col2:
         </div>
         """, unsafe_allow_html=True)
 
-# System overview section
-st.markdown("## 🚀 Platform Overview")
+# Quick overview
+st.markdown("## 🚀 AI-Powered Video Surveillance")
 
-# Quick stats if backend is available
-if st.session_state.system_status == 'online' and API_AVAILABLE:
-    try:
-        api_client = SurveillanceAPIClient()
-        
-        # Get quick stats
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            st.markdown("""
-            <div class="quick-stat">
-                <div class="quick-stat-value">●</div>
-                <div class="quick-stat-label">System Status</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col2:
-            st.markdown("""
-            <div class="quick-stat">
-                <div class="quick-stat-value">AI</div>
-                <div class="quick-stat-label">Models Ready</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col3:
-            st.markdown("""
-            <div class="quick-stat">
-                <div class="quick-stat-value">⚡</div>
-                <div class="quick-stat-label">Real-time</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col4:
-            st.markdown("""
-            <div class="quick-stat">
-                <div class="quick-stat-value">🔒</div>
-                <div class="quick-stat-label">Secure</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        st.markdown("<br>", unsafe_allow_html=True)
-        
-    except Exception:
-        pass
-
-# Core features section
-st.markdown("### 🎯 Core Features")
-
-# Main feature cards with enhanced descriptions
-col1, col2 = st.columns(2)
+# Main feature cards
+col1, col2, col3, col4 = st.columns(4)
 
 with col1:
     st.markdown("""
     <div class="feature-card">
-        <h3>🎬 Video Processing</h3>
-        <p>Upload and analyze surveillance footage with state-of-the-art YOLOv8 object detection. Process multiple formats including MP4, AVI, MOV with real-time progress tracking.</p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown("""
-    <div class="feature-card">
-        <h3>📊 Analytics Dashboard</h3>
-        <p>Comprehensive insights with detection statistics, temporal patterns, and visual analytics. Export reports and track system performance metrics.</p>
+        <h3>🎬 Process</h3>
+        <p>Upload videos for AI analysis</p>
     </div>
     """, unsafe_allow_html=True)
 
 with col2:
     st.markdown("""
     <div class="feature-card">
-        <h3>🔍 Semantic Search</h3>
-        <p>Natural language queries powered by BLIP image captioning. Search footage using descriptions like "person with red jacket" or "car in parking lot".</p>
+        <h3>🔍 Search</h3>
+        <p>Query footage naturally</p>
     </div>
     """, unsafe_allow_html=True)
-    
+
+with col3:
     st.markdown("""
     <div class="feature-card">
-        <h3>⚙️ System Monitoring</h3>
-        <p>Real-time system health monitoring, performance metrics, and AI model status. Ensure optimal operation with comprehensive diagnostics.</p>
+        <h3>� Analyze</h3>
+        <p>View detection insights</p>
     </div>
     """, unsafe_allow_html=True)
 
-# Technology & Integration section
-st.markdown("### 🛠️ Technology Stack")
-
-tech_col1, tech_col2, tech_col3 = st.columns(3)
-
-with tech_col1:
+with col4:
     st.markdown("""
-    <div class="info-card">
-        <h4>🤖 AI Models</h4>
-        <p><strong>YOLOv8:</strong> Real-time object detection</p>
-        <p><strong>BLIP:</strong> Image captioning & search</p>
-        <p><strong>Custom Training:</strong> Domain-specific optimization</p>
+    <div class="feature-card">
+        <h3>⚙️ Monitor</h3>
+        <p>Check system status</p>
     </div>
     """, unsafe_allow_html=True)
 
-with tech_col2:
-    st.markdown("""
-    <div class="info-card">
-        <h4>🔧 Backend</h4>
-        <p><strong>FastAPI:</strong> High-performance API</p>
-        <p><strong>PostgreSQL:</strong> Reliable data storage</p>
-        <p><strong>Redis:</strong> Caching & job queues</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-with tech_col3:
-    st.markdown("""
-    <div class="info-card">
-        <h4>🎨 Frontend</h4>
-        <p><strong>Streamlit:</strong> Interactive interface</p>
-        <p><strong>Real-time:</strong> Live status updates</p>
-        <p><strong>Responsive:</strong> Mobile-friendly design</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-# Demo and getting started section
+# Demo mode highlight
 st.markdown("---")
+st.info("🎭 **Try Demo Mode**: Each page has demo buttons to show examples without backend setup!")
 
-# Create two main sections
-demo_col, start_col = st.columns(2)
+# Getting started
+st.markdown("### � Get Started")
+start_col1, start_col2 = st.columns(2)
 
-with demo_col:
-    st.markdown("### 🎭 Demo Mode")
-    st.info("**Perfect for presentations and testing!**")
-    st.markdown("""
-    **Features:**
-    - ✅ No backend required
-    - ✅ Sample data and analytics
-    - ✅ Full UI demonstration
-    - ✅ Interactive examples
-    """)
-    
-    if st.button("🚀 Explore Demo Features", use_container_width=True):
-        st.success("Navigate to any page and click the demo buttons!")
+with start_col1:
+    st.markdown("**� For Demo/Presentation:**")
+    st.markdown("→ Click any page and use the demo buttons")
 
-with start_col:
-    st.markdown("### 🚀 Production Mode")
-    if st.session_state.system_status == 'online':
-        st.success("**Backend is ready!**")
-        st.markdown("""
-        **Ready to use:**
-        - ✅ Real-time processing
-        - ✅ Live analytics
-        - ✅ Full functionality
-        - ✅ Data persistence
-        """)
-    else:
-        st.warning("**Backend required for full functionality**")
-        st.markdown("""
-        **To enable:**
-        - 🔧 Start the FastAPI backend
-        - 🔧 Ensure database connection
-        - 🔧 Load AI models
-        - 🔧 Check system status
-        """)
-    
-    if st.button("🔧 Check System Status", use_container_width=True):
-        st.rerun()
+with start_col2:
+    st.markdown("**🔧 For Real Usage:**") 
+    st.markdown("→ Start with Video Processing page")
 
-# Enhanced sidebar with navigation and info
+# Sidebar info
 with st.sidebar:
-    st.markdown("### 🎯 Navigation")
-    
-    # Navigation cards
-    st.markdown("""
-    <div class="nav-card">
-        <strong>📤 Video Processing</strong><br>
-        <small>Upload and analyze surveillance footage</small>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown("""
-    <div class="nav-card">
-        <strong>🔍 Semantic Search</strong><br>
-        <small>Natural language video queries</small>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown("""
-    <div class="nav-card">
-        <strong>📊 Analytics</strong><br>
-        <small>Detection insights and reports</small>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown("""
-    <div class="nav-card">
-        <strong>⚙️ System Status</strong><br>
-        <small>Health monitoring and diagnostics</small>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown("### 🎯 Pages")
+    st.markdown("📤 **Video Processing** - Upload & analyze")
+    st.markdown("🔍 **Semantic Search** - Natural queries") 
+    st.markdown("📊 **Analytics** - View insights")
+    st.markdown("⚙️ **System Status** - Health check")
     
     st.markdown("---")
-    
-    # System information
-    st.markdown("### 📋 System Info")
-    
-    # Show current time
-    current_time = datetime.now().strftime("%H:%M:%S")
-    st.markdown(f"**🕒 Current Time:** {current_time}")
-    
-    # Show system status
-    if st.session_state.system_status == 'online':
-        st.markdown("**🟢 Status:** Online")
-    elif st.session_state.system_status == 'offline':
-        st.markdown("**🔴 Status:** Offline")
-    else:
-        st.markdown("**🟡 Status:** Demo Mode")
-    
-    # Show API availability
-    if API_AVAILABLE:
-        st.markdown("**📡 API Client:** Available")
-    else:
-        st.markdown("**📡 API Client:** Not Available")
-    
-    st.markdown("---")
-    
-    # Quick tips
-    st.markdown("### 💡 Quick Tips")
-    st.markdown("""
-    • **Demo Mode:** Try features without setup
-    • **Backend Port:** Default 5000
-    • **AI Models:** YOLOv8 + BLIP
-    • **Supported Formats:** MP4, AVI, MOV
-    • **Real-time:** Live processing updates
-    """)
-    
-    st.markdown("---")
-    
-    # Footer info
-    st.markdown("### ℹ️ About")
-    st.markdown("""
-    **Version:** 1.0.0  
-    **License:** MIT  
-    **Platform:** Production Ready  
-    """)
-    
-    # Refresh button
-    if st.button("🔄 Refresh Status", use_container_width=True):
-        st.session_state.last_status_check = 0  # Force status check
-        st.rerun()
+    st.markdown("### 💡 Tips")
+    st.markdown("• Use demo buttons for presentations")
+    st.markdown("• Backend runs on port 5000")
+    st.markdown("• AI models: YOLOv8 + BLIP")

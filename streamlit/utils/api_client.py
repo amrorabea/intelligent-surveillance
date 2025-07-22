@@ -253,14 +253,26 @@ class SurveillanceAPIClient:
             }
     
     def get_database_stats(self) -> Dict[str, Any]:
-        """Get database statistics"""
+        """Get database statistics using available endpoints"""
         try:
             headers = {"Authorization": f"Bearer {self.auth_token}"}
-            response = requests.get(f"{self.base_url}/surveillance/stats", headers=headers, timeout=10)
+            
+            # Try health endpoint first (this exists in the backend)
+            response = requests.get(f"{self.base_url}/surveillance/health", headers=headers, timeout=10)
             if response.status_code == 200:
                 return {"success": True, "stats": response.json()}
-            else:
-                return {"success": False, "error": f"HTTP {response.status_code}"}
+            
+            # If health endpoint fails, try analytics endpoint
+            response = requests.get(f"{self.base_url}/surveillance/analytics", headers=headers, timeout=10)
+            if response.status_code == 200:
+                return {"success": True, "stats": response.json()}
+            
+            # If both fail but we get a 404, server is up but endpoints aren't implemented
+            if response.status_code == 404:
+                return {"success": True, "stats": {"message": "Backend is running but endpoints not fully implemented"}}
+            
+            return {"success": False, "error": f"HTTP {response.status_code}"}
+            
         except requests.exceptions.RequestException as e:
             return {"success": False, "error": str(e)}
     
@@ -392,8 +404,15 @@ class SurveillanceAPIClient:
             "total_found": len(available_endpoints)
         }
     
-    def get_analytics(self, **kwargs) -> Dict[str, Any]:
-        """Get analytics data from the surveillance system"""
+    def get_analytics(self, heavy_mode: bool = False, **kwargs) -> Dict[str, Any]:
+        """
+        Get analytics data from the surveillance system
+        
+        Args:
+            heavy_mode (bool): If True, use heavy analytics (loads sentence transformer).
+                              If False, use light analytics (no model loading).
+            **kwargs: Additional parameters like project_id, date filters, etc.
+        """
         
         # Prepare parameters
         params = {}
@@ -408,29 +427,38 @@ class SurveillanceAPIClient:
         if kwargs.get("time_range"):
             params["time_range"] = kwargs.get("time_range")
         
-        # Try multiple analytics endpoints
-        endpoints_to_try = [
-            f"{self.base_url}/surveillance/analytics",
-            f"{self.base_url}/analytics", 
-            f"{self.base_url}/surveillance/stats",
-            f"{self.base_url}/surveillance/analytics/summary",
-        ]
-        
-        # If project_id is specified, try project-specific endpoints
-        if params.get("project_id"):
-            project_endpoints = [
-                f"{self.base_url}/surveillance/analytics/summary/{params['project_id']}",
-                f"{self.base_url}/surveillance/analytics/{params['project_id']}",
-                f"{self.base_url}/analytics/{params['project_id']}",
+        # Choose endpoints based on mode
+        if heavy_mode:
+            # Heavy analytics endpoints (loads sentence transformer model)
+            endpoints_to_try = [
+                f"{self.base_url}/surveillance/analytics",  # Main heavy analytics
+                f"{self.base_url}/analytics", 
+                f"{self.base_url}/surveillance/analytics/summary",
             ]
-            endpoints_to_try = project_endpoints + endpoints_to_try
+            
+            # If project_id is specified, try project-specific endpoints
+            if params.get("project_id"):
+                project_endpoints = [
+                    f"{self.base_url}/surveillance/analytics/summary/{params['project_id']}",
+                    f"{self.base_url}/surveillance/analytics/{params['project_id']}",
+                    f"{self.base_url}/analytics/{params['project_id']}",
+                ]
+                endpoints_to_try = project_endpoints + endpoints_to_try
+        else:
+            # Light analytics endpoints (no model loading)
+            endpoints_to_try = [
+                f"{self.base_url}/surveillance/analytics/light",  # New light endpoint
+                f"{self.base_url}/surveillance/health",  # Fallback to health
+            ]
         
         # Prepare headers with authentication
         headers = {"Authorization": f"Bearer {self.auth_token}"}
         
         for endpoint_url in endpoints_to_try:
             try:
-                response = requests.get(endpoint_url, params=params, headers=headers, timeout=30)
+                # Use longer timeout for heavy mode
+                timeout = 45 if heavy_mode else 15
+                response = requests.get(endpoint_url, params=params, headers=headers, timeout=timeout)
                 
                 if response.status_code == 200:
                     response_data = response.json()
@@ -452,30 +480,111 @@ class SurveillanceAPIClient:
             except requests.exceptions.RequestException:
                 continue  # Try next endpoint
         
+        mode_desc = "heavy" if heavy_mode else "light"
         return {
             "success": False, 
-            "error": f"All analytics endpoints failed. Tried: {endpoints_to_try}"
+            "error": f"All {mode_desc} analytics endpoints failed. Tried: {endpoints_to_try}"
         }
 
     def get_surveillance_stats(self, project_id: str = None) -> Dict[str, Any]:
-        """Get surveillance statistics"""
+        """Get surveillance statistics using available endpoints (lightweight version)"""
         try:
             headers = {"Authorization": f"Bearer {self.auth_token}"}
             
-            if project_id:
-                endpoint = f"{self.base_url}/surveillance/analytics/summary/{project_id}"
-            else:
-                endpoint = f"{self.base_url}/surveillance/stats"
-                
-            response = requests.get(endpoint, headers=headers, timeout=15)
+            # Only use the health endpoint to avoid triggering VectorDB loading
+            # The analytics endpoint causes sentence transformer loading which is too heavy
+            endpoint = f"{self.base_url}/surveillance/health"
+            response = requests.get(endpoint, headers=headers, timeout=10)
             
             if response.status_code == 200:
-                return {"success": True, "stats": response.json()}
+                health_data = response.json()
+                # Transform health data into stats format if needed
+                if isinstance(health_data, dict):
+                    return {"success": True, "stats": health_data}
+                else:
+                    return {"success": True, "stats": {"health": health_data}}
             else:
-                return {"success": False, "error": f"HTTP {response.status_code}: {response.text}"}
+                return {"success": False, "error": f"Health endpoint returned HTTP {response.status_code}"}
                 
         except requests.exceptions.RequestException as e:
             return {"success": False, "error": str(e)}
+    
+    def health_check(self) -> Dict[str, Any]:
+        """Simple health check to see if the backend is running"""
+        try:
+            # Try the base URL first
+            response = requests.get("http://localhost:5000", timeout=5)
+            if response.status_code in [200, 404]:  # Either is fine, means server is up
+                return {"success": True, "status": "Backend is running"}
+            else:
+                return {"success": False, "error": f"Unexpected status code: {response.status_code}"}
+        except requests.exceptions.ConnectionError:
+            return {"success": False, "error": "Cannot connect to backend"}
+        except requests.exceptions.Timeout:
+            return {"success": False, "error": "Backend timeout"}
+        except Exception as e:
+            return {"success": False, "error": f"Health check failed: {str(e)}"}
+    
+    def discover_projects(self) -> Dict[str, Any]:
+        """Attempt to discover available projects by analyzing database content"""
+        try:
+            # First try to get general database stats
+            stats_result = self.get_database_stats()
+            if not stats_result.get("success", False):
+                return {"success": False, "error": "Database not accessible"}
+            
+            discovered_projects = []
+            
+            # Try common project patterns with test searches
+            common_patterns = [
+                "test-project", "surveillance-demo", "camera-01", "security-main",
+                "lobby-security", "parking-surveillance", "entrance-cam",
+                "surveillance-2024", "camera-main", "security-test"
+            ]
+            
+            headers = {"Authorization": f"Bearer {self.auth_token}"}
+            
+            for pattern in common_patterns:
+                try:
+                    # Quick test search to see if project has data
+                    params = {
+                        "query": "test", 
+                        "project_id": pattern,
+                        "max_results": 1,
+                        "confidence_threshold": 0.1
+                    }
+                    
+                    response = requests.get(
+                        f"{self.base_url}/surveillance/query", 
+                        params=params, 
+                        headers=headers, 
+                        timeout=5
+                    )
+                    
+                    if response.status_code == 200:
+                        response_data = response.json()
+                        results = response_data.get("results", [])
+                        if len(results) > 0:
+                            discovered_projects.append({
+                                "project_id": pattern,
+                                "source": "pattern_test",
+                                "type": "verified",
+                                "data_count": len(results)
+                            })
+                except Exception:
+                    continue
+            
+            return {
+                "success": True,
+                "projects": discovered_projects,
+                "total_discovered": len(discovered_projects)
+            }
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Project discovery failed: {str(e)}"
+            }
 
 # Global API client instance
 api_client = SurveillanceAPIClient()

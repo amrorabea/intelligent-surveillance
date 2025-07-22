@@ -61,6 +61,17 @@ st.markdown("""
         border-radius: 8px;
         border-left: 4px solid #6c757d;
     }
+    .demo-section {
+        background: #f8f9fa;
+        padding: 1rem;
+        border-radius: 8px;
+        margin: 1rem 0;
+        border-left: 4px solid #FF6B35;
+    }
+    .stButton > button {
+        width: 100%;
+        border-radius: 8px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -74,7 +85,216 @@ if "last_check" not in st.session_state:
     st.session_state.last_check = None
 
 st.title("⚙️ System Status")
-st.markdown("Monitor the health and performance of your surveillance system")
+st.markdown("Monitor system health and performance of surveillance components.")
+
+# Demo Section
+st.markdown("### 🎛️ Demo Mode")
+demo_col1, demo_col2, demo_col3 = st.columns(3)
+
+with demo_col1:
+    if st.button("✅ Healthy", type="primary"):
+        st.session_state.demo_status = "healthy"
+        st.session_state.show_demo_status = True
+
+with demo_col2:
+    if st.button("⚠️ Warning", type="secondary"):
+        st.session_state.demo_status = "warning"
+        st.session_state.show_demo_status = True
+
+with demo_col3:
+    if st.button("🔧 Maintenance", type="secondary"):
+        st.session_state.demo_status = "maintenance"
+        st.session_state.show_demo_status = True
+
+# Demo Status Display
+if st.session_state.get('show_demo_status', False):
+    status_type = st.session_state.get('demo_status', 'healthy')
+    
+    if status_type == "healthy":
+        st.markdown("#### ✅ All Systems Operational")
+        
+        # Service status
+        services = [
+            ("🔧 FastAPI Backend", "✅ Running", "Port 8000", "2.3 GB RAM", "HTTP 200"),
+            ("⚡ Celery Worker", "✅ Active", "2 workers", "4.1 GB RAM", "Processing queue"),
+            ("🗄️ Redis Server", "✅ Connected", "Port 6379", "256 MB RAM", "0ms latency"),
+            ("🧠 AI Models", "✅ Loaded", "YOLOv8 + BLIP", "3.2 GB VRAM", "Ready"),
+            ("💾 Vector Database", "✅ Operational", "ChromaDB", "1.8 GB", "Index ready")
+        ]
+        
+        for service, status, detail1, detail2, detail3 in services:
+            st.markdown(f"""
+            <div class="status-card status-good">
+            <h5>{service}</h5>
+            <p><strong>Status:</strong> {status} | <strong>Details:</strong> {detail1} | <strong>Memory:</strong> {detail2} | <strong>Info:</strong> {detail3}</p>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    elif status_type == "warning":
+        st.markdown("#### ⚠️ System Issues Detected")
+        
+        services = [
+            ("🔧 FastAPI Backend", "✅ Running", "Port 8000", "2.3 GB RAM", "HTTP 200"),
+            ("⚡ Celery Worker", "⚠️ High Load", "2 workers", "6.8 GB RAM", "Queue: 45 jobs"),
+            ("🗄️ Redis Server", "✅ Connected", "Port 6379", "512 MB RAM", "5ms latency"),
+            ("🧠 AI Models", "⚠️ Memory Warning", "YOLOv8 + BLIP", "7.1/8 GB VRAM", "Near capacity"),
+            ("💾 Vector Database", "✅ Operational", "ChromaDB", "2.1 GB", "Index ready")
+        ]
+        
+        for service, status, detail1, detail2, detail3 in services:
+            css_class = "status-warning" if "⚠️" in status else "status-good"
+            st.markdown(f"""
+            <div class="status-card {css_class}">
+            <h5>{service}</h5>
+            <p><strong>Status:</strong> {status} | <strong>Details:</strong> {detail1} | <strong>Memory:</strong> {detail2} | <strong>Info:</strong> {detail3}</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        st.warning("⚠️ **Action Required:** High memory usage detected. Consider scaling workers or upgrading hardware.")
+    
+    else:  # maintenance
+        st.markdown("#### 🔧 Maintenance Mode Active")
+        
+        services = [
+            ("🔧 FastAPI Backend", "🔧 Maintenance", "Port 8000", "1.2 GB RAM", "HTTP 503"),
+            ("⚡ Celery Worker", "⏸️ Paused", "0 workers", "0 GB RAM", "Not processing"),
+            ("🗄️ Redis Server", "✅ Connected", "Port 6379", "128 MB RAM", "1ms latency"),
+            ("🧠 AI Models", "⏸️ Unloaded", "Updating", "0 GB VRAM", "Model sync"),
+            ("💾 Vector Database", "🔧 Backup", "ChromaDB", "1.8 GB", "Read-only mode")
+        ]
+        
+        for service, status, detail1, detail2, detail3 in services:
+            if "🔧" in status or "⏸️" in status:
+                css_class = "status-warning"
+            else:
+                css_class = "status-good"
+            
+            st.markdown(f"""
+            <div class="status-card {css_class}">
+            <h5>{service}</h5>
+            <p><strong>Status:</strong> {status} | <strong>Details:</strong> {detail1} | <strong>Memory:</strong> {detail2} | <strong>Info:</strong> {detail3}</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        st.info("🔧 **Maintenance Window:** System updates in progress. Expected completion: 15 minutes.")
+
+# Demo System Metrics
+if st.session_state.get('show_demo_status', False):
+    st.markdown("#### 📊 System Metrics Demo")
+    
+    metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
+    
+    with metric_col1:
+        st.metric(
+            label="🖥️ CPU Usage",
+            value="34%",
+            delta="-5%"
+        )
+    
+    with metric_col2:
+        st.metric(
+            label="💾 Memory Usage", 
+            value="8.2/16 GB",
+            delta="512 MB"
+        )
+    
+    with metric_col3:
+        st.metric(
+            label="💿 Disk Usage",
+            value="156/500 GB",
+            delta="2.3 GB"
+        )
+    
+    with metric_col4:
+        st.metric(
+            label="🌡️ GPU Temp",
+            value="67°C",
+            delta="2°C"
+        )
+    
+    # Performance overview
+    st.markdown("#### ⚡ Performance Overview")
+    
+    perf_data = {
+        "Component": ["Video Processing", "Object Detection", "Image Captioning", "Semantic Search", "Database Queries"],
+        "Avg Response Time": ["3.2 min", "45 ms", "120 ms", "23 ms", "8 ms"],
+        "Throughput": ["18 videos/hour", "25 FPS", "8 FPS", "2,500 queries/min", "15,000 ops/sec"],
+        "Success Rate": ["99.2%", "98.7%", "97.1%", "99.8%", "99.9%"]
+    }
+    
+    import pandas as pd
+    df_perf = pd.DataFrame(perf_data)
+    st.dataframe(df_perf, use_container_width=True)
+    
+    # Recent activity log
+    st.markdown("#### 📋 Recent Activity Log")
+    
+    log_entries = [
+        "✅ 14:23:15 - Video processing completed: security_cam_001.mp4",
+        "🔍 14:22:48 - Search query executed: 'person with backpack' (23 results)",
+        "📊 14:21:32 - Analytics refresh completed (1,250 new detections)",
+        "⚡ 14:20:15 - Celery worker scaled: 2 → 3 workers",
+        "🎬 14:19:03 - Video upload started: parking_lot_cam.mp4",
+        "✅ 14:17:21 - Health check passed for all services",
+        "🔧 14:15:44 - Model cache optimized (freed 1.2 GB)",
+        "📈 14:12:18 - Performance metrics collected"
+    ]
+    
+    for entry in log_entries:
+        st.text(entry)
+
+# Demo configuration display
+if st.session_state.get('show_demo_status', False):
+    st.markdown("#### ⚙️ System Configuration")
+    
+    config_col1, config_col2 = st.columns(2)
+    
+    with config_col1:
+        st.markdown("""
+        **🔧 Backend Configuration:**
+        - API Host: localhost:8000
+        - Workers: 3 active
+        - Redis: localhost:6379
+        - Upload Limit: 500 MB
+        - Processing Timeout: 30 min
+        """)
+        
+        st.markdown("""
+        **🧠 AI Model Settings:**
+        - YOLOv8: Nano (6.2 MB)
+        - BLIP: Base model (990 MB)
+        - Confidence Threshold: 0.5
+        - Batch Size: 8 frames
+        - Device: CUDA (GPU 0)
+        """)
+    
+    with config_col2:
+        st.markdown("""
+        **💾 Storage Configuration:**
+        - Upload Directory: /app/uploads
+        - Vector DB: /app/vector_db
+        - Model Cache: /app/models
+        - Log Files: /app/logs
+        - Backup Location: /backup
+        """)
+        
+        st.markdown("""
+        **🔒 Security Settings:**
+        - Authentication: Disabled (Dev)
+        - CORS Origins: localhost:*
+        - Rate Limiting: 100 req/min
+        - File Validation: Enabled
+        - Audit Logging: Enabled
+        """)
+
+if st.button("🧹 Clear Demo Status"):
+    for key in ['show_demo_status', 'demo_status']:
+        if key in st.session_state:
+            del st.session_state[key]
+    st.rerun()
+
+st.markdown("---")
+st.markdown("### 🚀 **Real System Status** - Live Monitoring")
 
 # Header
 st.markdown("""

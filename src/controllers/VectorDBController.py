@@ -13,13 +13,19 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 class VectorDBController(BaseController):
-    def __init__(self, collection_name: str = "surveillance_collection"):
+    # Class-level cache for shared model and client
+    _shared_encoder = None
+    _shared_client = None
+    _shared_db_dir = None
+    
+    def __init__(self, collection_name: str = "surveillance_collection", load_encoder: bool = True):
         super().__init__()
         
         # Disable telemetry to avoid errors
         os.environ["ANONYMIZED_TELEMETRY"] = "False"
         
         self.collection_name = collection_name
+        self.load_encoder = load_encoder
 
         # Set up ChromaDB client with persistent storage
         db_dir = os.path.join(self.files_dir, "chromadb")
@@ -29,25 +35,45 @@ class VectorDBController(BaseController):
         self.encoder = None
         self.collection = None
         
-        # Initialize connections
+        # Initialize connections (using cached versions when possible)
         self._initialize_client(db_dir)
-        self._initialize_encoder()
+        if load_encoder:
+            self._initialize_encoder()
         self._initialize_collection()
         
     def _initialize_client(self, db_dir: str):
-        """Initialize ChromaDB client"""
+        """Initialize ChromaDB client using cached version when possible"""
         try:
+            # Use cached client if available and same directory
+            if (VectorDBController._shared_client is not None and 
+                VectorDBController._shared_db_dir == db_dir):
+                self.client = VectorDBController._shared_client
+                logger.info(f"Using cached ChromaDB client for {db_dir}")
+                return
+            
+            # Create new client and cache it
             self.client = chromadb.PersistentClient(path=db_dir)
-            logger.info(f"ChromaDB client initialized at {db_dir}")
+            VectorDBController._shared_client = self.client
+            VectorDBController._shared_db_dir = db_dir
+            logger.info(f"ChromaDB client initialized and cached at {db_dir}")
         except Exception as e:
             logger.error(f"Failed to initialize ChromaDB client: {e}")
             self.client = None
     
     def _initialize_encoder(self):
-        """Initialize sentence transformer encoder"""
+        """Initialize sentence transformer encoder using cached version when possible"""
         try:
+            # Use cached encoder if available
+            if VectorDBController._shared_encoder is not None:
+                self.encoder = VectorDBController._shared_encoder
+                logger.info("Using cached sentence transformer encoder")
+                return
+            
+            # Load new encoder and cache it
+            logger.info("Loading sentence transformer encoder (this may take a moment)...")
             self.encoder = SentenceTransformer('all-MiniLM-L6-v2')
-            logger.info("Sentence transformer encoder loaded successfully")
+            VectorDBController._shared_encoder = self.encoder
+            logger.info("Sentence transformer encoder loaded successfully and cached")
         except Exception as e:
             logger.error(f"Failed to load sentence transformer: {e}")
             self.encoder = None
@@ -221,6 +247,63 @@ class VectorDBController(BaseController):
             logger.error(f"Error deleting document {document_id}: {e}")
             return False
     
+    def switch_collection(self, collection_name: str) -> bool:
+        """
+        Switch to a different collection without reloading the sentence transformer model.
+        This is much more efficient than creating a new VectorDBController instance.
+        
+        Args:
+            collection_name (str): Name of the collection to switch to
+            
+        Returns:
+            bool: Success status
+        """
+        if not self.client:
+            logger.error("Cannot switch collection: ChromaDB client not available")
+            return False
+            
+        try:
+            old_collection = self.collection_name
+            self.collection_name = collection_name
+            self.collection = self.client.get_collection(collection_name)
+            logger.info(f"Switched from collection '{old_collection}' to '{collection_name}'")
+            return True
+        except Exception as e:
+            logger.warning(f"Collection '{collection_name}' not found or cannot be accessed: {e}")
+            return False
+        
+    def get_collection_stats(self, collection_name: str = None) -> Dict[str, Any]:
+        """
+        Get basic stats for a collection without loading the full data.
+        
+        Args:
+            collection_name (str, optional): Collection to get stats for. Uses current if None.
+            
+        Returns:
+            dict: Collection statistics
+        """
+        target_collection = collection_name or self.collection_name
+        
+        if not self.client:
+            return {"error": "ChromaDB client not available", "count": 0}
+            
+        try:
+            collection = self.client.get_collection(target_collection)
+            count = collection.count()
+            return {
+                "name": target_collection,
+                "count": count,
+                "available": True
+            }
+        except Exception as e:
+            logger.warning(f"Cannot get stats for collection '{target_collection}': {e}")
+            return {
+                "name": target_collection,
+                "count": 0,
+                "available": False,
+                "error": str(e)
+            }
+    
     def get_collection_stats(self) -> Dict[str, Any]:
         """Get statistics about the collection"""
         if not self.is_available():
@@ -369,3 +452,21 @@ class VectorDBController(BaseController):
             self.logger.info("Vector database resources cleaned up")
         except Exception as e:
             self.logger.error(f"Error during cleanup: {e}")
+    
+    def ensure_encoder_loaded(self) -> bool:
+        """
+        Ensure the sentence transformer encoder is loaded.
+        Call this before operations that require embeddings.
+        
+        Returns:
+            bool: True if encoder is available
+        """
+        if self.encoder is not None:
+            return True
+            
+        if not self.load_encoder:
+            logger.warning("Encoder loading is disabled for this controller instance")
+            return False
+            
+        self._initialize_encoder()
+        return self.encoder is not None
