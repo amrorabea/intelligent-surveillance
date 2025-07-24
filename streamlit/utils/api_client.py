@@ -458,7 +458,12 @@ class SurveillanceAPIClient:
             try:
                 # Use longer timeout for heavy mode
                 timeout = 45 if heavy_mode else 15
+                print(f"🔍 Requesting: {endpoint_url}")
+                print(f"📋 Headers: {headers}")
+                print(f"📋 Params: {params}")
                 response = requests.get(endpoint_url, params=params, headers=headers, timeout=timeout)
+                print(f"📡 Response Status: {response.status_code}")
+                print(f"📝 Response: {response.text[:300]}")
                 
                 if response.status_code == 200:
                     response_data = response.json()
