@@ -14,7 +14,7 @@ This guide helps developers set up, understand, and contribute to the Intelligen
 ### Quick Setup
 ```bash
 # Clone repository
-git clone https://github.com/your-repo/intelligent-surveillance.git
+git clone https://github.com/amrorabea/intelligent-surveillance
 cd intelligent-surveillance
 
 # Create development environment
