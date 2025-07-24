@@ -13,15 +13,14 @@ from models.schemas import (
     ProcessingJobResponse, SystemHealthResponse, AnalyticsResponse,
     APIResponse
 )
-from services.auth import get_current_user, get_optional_user, check_rate_limit, verify_project_access
+from services.auth import get_current_user, get_optional_user, verify_project_access
 from services.job_queue import job_manager
 
 logger = logging.getLogger(__name__)
 
 surveillance_router = APIRouter(
     prefix="/api/surveillance",
-    tags=["surveillance"],
-    dependencies=[Depends(check_rate_limit)]
+    tags=["surveillance"]
 )
 
 # Job Management Endpoints
@@ -744,7 +743,7 @@ async def get_general_analytics(
 # Lightweight Analytics Endpoint
 @surveillance_router.get("/analytics/light", response_model=Dict[str, Any])
 async def get_light_analytics(
-    user: dict = Depends(get_current_user)
+    user: dict = Depends(get_optional_user)
 ):
     """Get lightweight analytics without loading sentence transformer models"""
     try:
@@ -771,7 +770,7 @@ async def get_light_analytics(
             # Create a direct chromadb client
             client = chromadb.PersistentClient(path=db_dir)
             client_available = True
-            logger.info(f"Direct ChromaDB client created for light analytics")
+            logger.info("Direct ChromaDB client created for light analytics")
             
             # Get collections without loading any models
             collections = client.list_collections()
