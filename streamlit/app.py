@@ -1,546 +1,232 @@
-# streamlit/app.py
 import streamlit as st
 import sys
 import os
 from datetime import datetime
 import time
+import json
 
-# Add src to path for importing your controllers if needed
+# Add src to path for importing controllers
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-# Try to import API client for status checks
+# Try to import API client
 try:
-    sys.path.append(os.path.join(os.path.dirname(__file__)))
     from utils.api_client import SurveillanceAPIClient
     API_AVAILABLE = True
 except ImportError:
     API_AVAILABLE = False
 
+# Simplified page config
 st.set_page_config(
-    page_title="🔍 Intelligent Surveillance System",
+    page_title="Surveillance System",
     page_icon="🔍",
     layout="wide",
-    initial_sidebar_state="expanded",
-    menu_items={
-        'Get Help': 'https://github.com/your-repo/surveillance-system',
-        'Report a bug': 'https://github.com/your-repo/surveillance-system/issues',
-        'About': """
-        # Intelligent Surveillance System
-        AI-powered video analysis platform with real-time object detection,
-        natural language search, and comprehensive analytics.
-        
-        **Version:** 1.0.0  
-        **Technologies:** YOLOv8, BLIP, FastAPI, Streamlit
-        """
-    }
+    initial_sidebar_state="auto"
 )
 
-# Custom CSS for production-ready styling
+# Simplified CSS for better readability
 st.markdown("""
 <style>
-    /* Import Google Fonts */
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-    
-    /* Global styles */
-    .stApp {
-        font-family: 'Inter', sans-serif;
+    body {
+        font-family: Arial, sans-serif;
+        color: #333;
     }
-    
-    /* Header styles */
-    .main-header {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 2rem;
-        border-radius: 16px;
-        color: white;
-        text-align: center;
-        margin-bottom: 2rem;
-        box-shadow: 0 8px 32px rgba(102, 126, 234, 0.25);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-    }
-    
-    .main-header h1 {
-        font-size: 2.5rem;
-        font-weight: 700;
-        margin: 0 0 0.5rem 0;
-        text-shadow: 0 2px 4px rgba(0,0,0,0.3);
-    }
-    
-    .main-header p {
-        font-size: 1.1rem;
-        margin: 0;
-        opacity: 0.9;
-        font-weight: 400;
-    }
-    
-    /* Feature cards */
-    .feature-card {
-        background: linear-gradient(145deg, #ffffff 0%, #f8f9ff 100%);
-        padding: 2rem 1.5rem;
-        border-radius: 16px;
-        border: 1px solid #e2e8f0;
-        margin: 0.5rem 0;
-        text-align: center;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-        position: relative;
-        overflow: hidden;
-    }
-    
-    .feature-card::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 4px;
-        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-        opacity: 0;
-        transition: opacity 0.3s ease;
-    }
-    
-    .feature-card:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 12px 24px rgba(102, 126, 234, 0.15);
-        border-color: #667eea;
-    }
-    
-    .feature-card:hover::before {
-        opacity: 1;
-    }
-    
-    .feature-card h3 {
-        margin: 0 0 1rem 0;
-        color: #1a202c;
-        font-size: 1.3rem;
-        font-weight: 600;
-    }
-    
-    .feature-card p {
-        margin: 0;
-        color: #64748b;
-        font-size: 0.95rem;
-        line-height: 1.5;
-    }
-    
-    /* Status indicators */
-    .status-indicator {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-        padding: 0.5rem 1rem;
-        border-radius: 50px;
-        font-size: 0.85rem;
-        font-weight: 500;
-        margin: 0.25rem;
-    }
-    
-    .status-online {
-        background: #dcfce7;
-        color: #166534;
-        border: 1px solid #bbf7d0;
-    }
-    
-    .status-offline {
-        background: #fef2f2;
-        color: #991b1b;
-        border: 1px solid #fecaca;
-    }
-    
-    .status-demo {
-        background: #fef3c7;
-        color: #92400e;
-        border: 1px solid #fde68a;
-    }
-    
-    /* Quick stats */
-    .quick-stat {
-        background: white;
-        padding: 1.5rem;
-        border-radius: 12px;
-        border: 1px solid #e2e8f0;
-        text-align: center;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-    }
-    
-    .quick-stat-value {
-        font-size: 2rem;
-        font-weight: 700;
-        color: #667eea;
-        margin: 0;
-    }
-    
-    .quick-stat-label {
-        font-size: 0.85rem;
-        color: #64748b;
-        margin: 0.25rem 0 0 0;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        font-weight: 500;
-    }
-    
-    /* Info cards */
-    .info-card {
-        background: #f8fafc;
-        border: 1px solid #e2e8f0;
-        border-radius: 12px;
-        padding: 1.5rem;
-        margin: 1rem 0;
-    }
-    
-    .info-card h4 {
-        color: #1a202c;
-        margin: 0 0 1rem 0;
-        font-weight: 600;
-    }
-    
-    /* Navigation cards */
-    .nav-card {
-        background: white;
-        border: 1px solid #e2e8f0;
-        border-radius: 12px;
+    .header {
+        background: #4a6ee0;
         padding: 1rem;
-        margin: 0.5rem 0;
-        transition: all 0.2s ease;
-        cursor: pointer;
-    }
-    
-    .nav-card:hover {
-        border-color: #667eea;
-        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1);
-    }
-    
-    /* Responsive adjustments */
-    @media (max-width: 768px) {
-        .main-header {
-            padding: 1.5rem;
-        }
-        
-        .main-header h1 {
-            font-size: 2rem;
-        }
-        
-        .feature-card {
-            padding: 1.5rem 1rem;
-        }
-    }
-    
-    /* Custom button styles */
-    .stButton > button {
         border-radius: 8px;
-        border: none;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
-        font-weight: 500;
-        transition: all 0.2s ease;
+        text-align: center;
+        margin-bottom: 1rem;
     }
-    
-    .stButton > button:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    .header h1 {
+        font-size: 1.8rem;
+        margin: 0;
+    }
+    .card {
+        background: #f5f5f5;
+        padding: 1rem;
+        border-radius: 8px;
+        margin: 0.5rem 0;
+        border: 1px solid #ddd;
+    }
+    .card h3 {
+        margin: 0 0 0.5rem 0;
+        font-size: 1.2rem;
+    }
+    .status {
+        padding: 0.5rem;
+        border-radius: 4px;
+        font-size: 0.9rem;
+        display: inline-block;
+    }
+    .status-online {
+        background: #e6ffe6;
+        color: #2e7d32;
+    }
+    .status-offline {
+        background: #ffe6e6;
+        color: #d32f2f;
+    }
+    .status-demo {
+        background: #fff3e0;
+        color: #ef6c00;
+    }
+    .stButton > button {
+        background: #4a6ee0;
+        color: white;
+        border-radius: 4px;
+        border: none;
+        padding: 0.5rem 1rem;
+    }
+    .status-details {
+        background: #f9f9f9;
+        padding: 1rem;
+        border-radius: 8px;
+        border: 1px solid #ddd;
+        margin-top: 1rem;
+        font-size: 0.9rem;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# Initialize session state for system status
+# Initialize session state
 if 'system_status' not in st.session_state:
     st.session_state.system_status = 'checking'
 if 'last_status_check' not in st.session_state:
     st.session_state.last_status_check = 0
+if 'status_details' not in st.session_state:
+    st.session_state.status_details = None
 
-# Function to check system status
+# Check system status and return full response
 def check_system_status():
-    """Check if the backend API is available"""
     if not API_AVAILABLE:
-        return False
-    
+        return False, {"status": "API client not available"}
     try:
-        # Use the actual health endpoint
         import requests
         response = requests.get("http://localhost:5000/api/surveillance/health", timeout=5)
-        return response.status_code == 200
-    except Exception:
-        return False
+        if response.status_code == 200:
+            return True, response.json()
+        else:
+            return False, {"status": f"Failed with status code {response.status_code}"}
+    except Exception as e:
+        return False, {"status": f"Error: {str(e)}"}
 
-# Check system status periodically (every 30 seconds)
+# Periodic status check
 current_time = time.time()
 if current_time - st.session_state.last_status_check > 30:
-    st.session_state.system_status = 'online' if check_system_status() else 'offline'
+    is_online, details = check_system_status()
+    st.session_state.system_status = 'online' if is_online else 'offline'
+    st.session_state.status_details = details
     st.session_state.last_status_check = current_time
 
-# Main header with status indicator
-header_col1, header_col2 = st.columns([4, 1])
+# Main header
+st.markdown("""
+<div class="header">
+    <h1>Surveillance System</h1>
+</div>
+""", unsafe_allow_html=True)
 
-with header_col1:
-    st.markdown("""
-    <div class="main-header">
-        <h1>🔍 Intelligent Surveillance System</h1>
-        <p>Enterprise-grade AI video analysis with real-time object detection and natural language search</p>
-    </div>
-    """, unsafe_allow_html=True)
+# Status indicator
+status_text = {
+    'online': '🟢 System Online',
+    'offline': '🔴 Backend Offline',
+    'checking': '🟡 Demo Mode'
+}
+st.markdown(f'<div class="status status-{st.session_state.system_status}">{status_text[st.session_state.system_status]}</div>', unsafe_allow_html=True)
 
-with header_col2:
-    st.markdown("<br>", unsafe_allow_html=True)  # Spacing
-    if st.session_state.system_status == 'online':
-        st.markdown("""
-        <div class="status-indicator status-online">
-            🟢 System Online
-        </div>
-        """, unsafe_allow_html=True)
-    elif st.session_state.system_status == 'offline':
-        st.markdown("""
-        <div class="status-indicator status-offline">
-            🔴 Backend Offline
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        st.markdown("""
-        <div class="status-indicator status-demo">
-            🟡 Demo Mode Available
-        </div>
-        """, unsafe_allow_html=True)
-
-# System overview section
-st.markdown("## 🚀 Platform Overview")
-
-# Quick stats if backend is available
-if st.session_state.system_status == 'online' and API_AVAILABLE:
-    try:
-        api_client = SurveillanceAPIClient()
-        
-        # Get quick stats
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            st.markdown("""
-            <div class="quick-stat">
-                <div class="quick-stat-value">●</div>
-                <div class="quick-stat-label">System Status</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col2:
-            st.markdown("""
-            <div class="quick-stat">
-                <div class="quick-stat-value">AI</div>
-                <div class="quick-stat-label">Models Ready</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col3:
-            st.markdown("""
-            <div class="quick-stat">
-                <div class="quick-stat-value">⚡</div>
-                <div class="quick-stat-label">Real-time</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col4:
-            st.markdown("""
-            <div class="quick-stat">
-                <div class="quick-stat-value">🔒</div>
-                <div class="quick-stat-label">Secure</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        st.markdown("<br>", unsafe_allow_html=True)
-        
-    except Exception:
-        pass
-
-# Core features section
-st.markdown("### 🎯 Core Features")
-
-# Main feature cards with enhanced descriptions
+# Core features
+st.markdown("### Features")
 col1, col2 = st.columns(2)
 
 with col1:
     st.markdown("""
-    <div class="feature-card">
-        <h3>🎬 Video Processing</h3>
-        <p>Upload and analyze surveillance footage with state-of-the-art YOLOv8 object detection. Process multiple formats including MP4, AVI, MOV with real-time progress tracking.</p>
+    <div class="card">
+        <h3>Video Processing</h3>
+        <p>Upload and analyze surveillance videos with object detection.</p>
     </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown("""
-    <div class="feature-card">
-        <h3>📊 Analytics Dashboard</h3>
-        <p>Comprehensive insights with detection statistics, temporal patterns, and visual analytics. Export reports and track system performance metrics.</p>
+    <div class="card">
+        <h3>Analytics</h3>
+        <p>View detection statistics and generate reports.</p>
     </div>
     """, unsafe_allow_html=True)
 
 with col2:
     st.markdown("""
-    <div class="feature-card">
-        <h3>🔍 Semantic Search</h3>
-        <p>Natural language queries powered by BLIP image captioning. Search footage using descriptions like "person with red jacket" or "car in parking lot".</p>
+    <div class="card">
+        <h3>Search</h3>
+        <p>Search videos using natural language descriptions.</p>
     </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown("""
-    <div class="feature-card">
-        <h3>⚙️ System Monitoring</h3>
-        <p>Real-time system health monitoring, performance metrics, and AI model status. Ensure optimal operation with comprehensive diagnostics.</p>
+    <div class="card">
+        <h3>Monitoring</h3>
+        <p>Track system health and performance in real-time.</p>
     </div>
     """, unsafe_allow_html=True)
 
-# Technology & Integration section
-st.markdown("### 🛠️ Technology Stack")
+# Demo and production modes
+col1, col2 = st.columns(2)
 
-tech_col1, tech_col2, tech_col3 = st.columns(3)
+with col1:
+    st.markdown("### Demo Mode")
+    st.markdown("Try features without setup.")
+    if st.button("Explore Demo", use_container_width=True):
+        st.success("Use demo buttons on any page!")
 
-with tech_col1:
-    st.markdown("""
-    <div class="info-card">
-        <h4>🤖 AI Models</h4>
-        <p><strong>YOLOv8:</strong> Real-time object detection</p>
-        <p><strong>BLIP:</strong> Image captioning & search</p>
-        <p><strong>Custom Training:</strong> Domain-specific optimization</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-with tech_col2:
-    st.markdown("""
-    <div class="info-card">
-        <h4>🔧 Backend</h4>
-        <p><strong>FastAPI:</strong> High-performance API</p>
-        <p><strong>PostgreSQL:</strong> Reliable data storage</p>
-        <p><strong>Redis:</strong> Caching & job queues</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-with tech_col3:
-    st.markdown("""
-    <div class="info-card">
-        <h4>🎨 Frontend</h4>
-        <p><strong>Streamlit:</strong> Interactive interface</p>
-        <p><strong>Real-time:</strong> Live status updates</p>
-        <p><strong>Responsive:</strong> Mobile-friendly design</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-# Demo and getting started section
-st.markdown("---")
-
-# Create two main sections
-demo_col, start_col = st.columns(2)
-
-with demo_col:
-    st.markdown("### 🎭 Demo Mode")
-    st.info("**Perfect for presentations and testing!**")
-    st.markdown("""
-    **Features:**
-    - ✅ No backend required
-    - ✅ Sample data and analytics
-    - ✅ Full UI demonstration
-    - ✅ Interactive examples
-    """)
-    
-    if st.button("🚀 Explore Demo Features", use_container_width=True):
-        st.success("Navigate to any page and click the demo buttons!")
-
-with start_col:
-    st.markdown("### 🚀 Production Mode")
+with col2:
+    st.markdown("### Production Mode")
     if st.session_state.system_status == 'online':
-        st.success("**Backend is ready!**")
-        st.markdown("""
-        **Ready to use:**
-        - ✅ Real-time processing
-        - ✅ Live analytics
-        - ✅ Full functionality
-        - ✅ Data persistence
-        """)
+        st.markdown("Backend is ready for full functionality.")
     else:
-        st.warning("**Backend required for full functionality**")
-        st.markdown("""
-        **To enable:**
-        - 🔧 Start the FastAPI backend
-        - 🔧 Ensure database connection
-        - 🔧 Load AI models
-        - 🔧 Check system status
-        """)
-    
-    if st.button("🔧 Check System Status", use_container_width=True):
-        st.rerun()
+        st.markdown("Start backend for full features.")
+    if st.button("Check Status", use_container_width=True):
+        is_online, details = check_system_status()
+        st.session_state.system_status = 'online' if is_online else 'offline'
+        st.session_state.status_details = details
+        st.session_state.last_status_check = current_time
+        # Display detailed status
+        if st.session_state.status_details:
+            st.markdown("#### System Status Details")
+            st.markdown(f"""
+            <div class="status-details">
+                <p><strong>Status:</strong> {details.get('status', 'N/A')}</p>
+                <p><strong>Timestamp:</strong> {details.get('timestamp', 'N/A')}</p>
+                <p><strong>Database Connected:</strong> {details.get('database_connected', 'N/A')}</p>
+                <p><strong>Vector DB Connected:</strong> {details.get('vector_db_connected', 'N/A')}</p>
+                <p><strong>Disk Usage (MB):</strong> {details.get('disk_usage_mb', 'N/A')}</p>
+                <p><strong>Memory Usage (MB):</strong> {details.get('memory_usage_mb', 'N/A')}</p>
+                <p><strong>Active Jobs:</strong> {details.get('active_jobs', 'N/A')}</p>
+                <p><strong>Version:</strong> {details.get('version', 'N/A')}</p>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown("No detailed status information available.")
 
-# Enhanced sidebar with navigation and info
+# Simplified sidebar
 with st.sidebar:
-    st.markdown("### 🎯 Navigation")
-    
-    # Navigation cards
+    st.markdown("### Navigation")
     st.markdown("""
-    <div class="nav-card">
-        <strong>📤 Video Processing</strong><br>
-        <small>Upload and analyze surveillance footage</small>
+    <div class="card">
+        <strong>Video Processing</strong><br>
+        Upload and analyze videos
+    </div>
+    <div class="card">
+        <strong>Search</strong><br>
+        Find video content
+    </div>
+    <div class="card">
+        <strong>Analytics</strong><br>
+        View insights
+    </div>
+    <div class="card">
+        <strong>Status</strong><br>
+        System monitoring
     </div>
     """, unsafe_allow_html=True)
     
-    st.markdown("""
-    <div class="nav-card">
-        <strong>🔍 Semantic Search</strong><br>
-        <small>Natural language video queries</small>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown("### System Info")
+    st.markdown(f"**Time:** {datetime.now().strftime('%H:%M:%S')}")
+    st.markdown(f"**Status:** {st.session_state.system_status.capitalize()}")
+    st.markdown(f"**API:** {'Available' if API_AVAILABLE else 'Not Available'}")
     
-    st.markdown("""
-    <div class="nav-card">
-        <strong>📊 Analytics</strong><br>
-        <small>Detection insights and reports</small>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown("""
-    <div class="nav-card">
-        <strong>⚙️ System Status</strong><br>
-        <small>Health monitoring and diagnostics</small>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown("---")
-    
-    # System information
-    st.markdown("### 📋 System Info")
-    
-    # Show current time
-    current_time = datetime.now().strftime("%H:%M:%S")
-    st.markdown(f"**🕒 Current Time:** {current_time}")
-    
-    # Show system status
-    if st.session_state.system_status == 'online':
-        st.markdown("**🟢 Status:** Online")
-    elif st.session_state.system_status == 'offline':
-        st.markdown("**🔴 Status:** Offline")
-    else:
-        st.markdown("**🟡 Status:** Demo Mode")
-    
-    # Show API availability
-    if API_AVAILABLE:
-        st.markdown("**📡 API Client:** Available")
-    else:
-        st.markdown("**📡 API Client:** Not Available")
-    
-    st.markdown("---")
-    
-    # Quick tips
-    st.markdown("### 💡 Quick Tips")
-    st.markdown("""
-    • **Demo Mode:** Try features without setup
-    • **Backend Port:** Default 5000
-    • **AI Models:** YOLOv8 + BLIP
-    • **Supported Formats:** MP4, AVI, MOV
-    • **Real-time:** Live processing updates
-    """)
-    
-    st.markdown("---")
-    
-    # Footer info
-    st.markdown("### ℹ️ About")
-    st.markdown("""
-    **Version:** 1.0.0  
-    **License:** MIT  
-    **Platform:** Production Ready  
-    """)
-    
-    # Refresh button
-    if st.button("🔄 Refresh Status", use_container_width=True):
-        st.session_state.last_status_check = 0  # Force status check
+    if st.button("Refresh", use_container_width=True):
+        st.session_state.last_status_check = 0
         st.rerun()
