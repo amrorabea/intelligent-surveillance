@@ -23,7 +23,7 @@ This guide will walk you through setting up the Intelligent Surveillance System 
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-repo/intelligent-surveillance.git
+git clone https://github.com/amrorabea/intelligent-surveillance
 cd intelligent-surveillance
 
 # Make setup script executable
@@ -40,7 +40,7 @@ make fullstack
 
 #### Step 1: Clone Repository
 ```bash
-git clone https://github.com/your-repo/intelligent-surveillance.git
+git clone https://github.com/amrorabea/intelligent-surveillance
 cd intelligent-surveillance
 ```
 
@@ -92,7 +92,7 @@ nano .env
 ### Setup
 ```bash
 # Clone repository
-git clone https://github.com/your-repo/intelligent-surveillance.git
+git clone https://github.com/amrorabea/intelligent-surveillance
 cd intelligent-surveillance
 
 # Build and start services
