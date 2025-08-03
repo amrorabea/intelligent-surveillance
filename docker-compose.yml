@@ -1,0 +1,56 @@
+version: '3.7'
+
+services:
+  # Redis for job queue
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Backend API
+  backend:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - PYTHONPATH=/app/src
+    volumes:
+      - ./src/data:/app/src/data
+      - ./src/assets:/app/src/assets
+    depends_on:
+      - redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # AI Worker
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: celery -A src.services.job_queue worker --loglevel=info --concurrency=1
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - PYTHONPATH=/app/src
+    volumes:
+      - ./src/data:/app/src/data
+      - ./src/assets:/app/src/assets
+    depends_on:
+      - redis
+      - backend
+    restart: unless-stopped

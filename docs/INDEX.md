@@ -12,37 +12,19 @@ Welcome to the comprehensive documentation for the Intelligent Surveillance Syst
 ### 🏗️ **Architecture & Design**
 - [**System Architecture**](ARCHITECTURE.md) - High-level system design and component interactions
 - [**API Reference**](API_REFERENCE.md) - Complete REST API documentation
-- [**Database Schema**](DATABASE.md) - Vector database and data models
 
 ### 🤖 **AI & Machine Learning**
 - [**AI Models Guide**](AI_MODELS.md) - YOLOv8, BLIP, tracking algorithms, and performance optimization
-- [**Computer Vision Pipeline**](COMPUTER_VISION.md) - Video processing and frame analysis
-- [**Semantic Search**](SEMANTIC_SEARCH.md) - Vector embeddings and similarity search
-
-### 🖥️ **User Interface**
-- [**Frontend Guide**](FRONTEND.md) - Streamlit interface and user workflows
-- [**Analytics Dashboard**](ANALYTICS.md) - Metrics, insights, and data visualization
-- [**Search Interface**](SEARCH_INTERFACE.md) - Natural language query system
 
 ### 🔧 **Development**
 - [**Development Guide**](DEVELOPMENT.md) - Setting up development environment and contributing
-- [**Contributing Guidelines**](CONTRIBUTING.md) - How to contribute to the project
-- [**Testing Guide**](TESTING.md) - Running tests and quality assurance
 
 ### 🚀 **Deployment**
 - [**Deployment Guide**](DEPLOYMENT.md) - Production deployment with Docker, Kubernetes, and cloud platforms
-- [**Docker Setup**](DOCKER.md) - Containerization and orchestration
-- [**Performance Tuning**](PERFORMANCE.md) - Optimization and scaling strategies
 
 ### 🛠️ **Operations**
-- [**Configuration Reference**](CONFIGURATION.md) - Environment variables and settings
-- [**Monitoring & Logging**](MONITORING.md) - System health and observability
 - [**Troubleshooting**](TROUBLESHOOTING.md) - Common issues and comprehensive solutions
-
-### 📈 **Advanced Topics**
 - [**Security Guide**](SECURITY.md) - Authentication, authorization, encryption, and security best practices
-- [**Scaling Guide**](SCALING.md) - Horizontal and vertical scaling strategies
-- [**Integration Guide**](INTEGRATION.md) - Third-party integrations and APIs
 
 ## 🎯 **Quick Navigation**
 
