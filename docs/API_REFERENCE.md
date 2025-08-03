@@ -5,7 +5,7 @@ Complete REST API documentation for the Intelligent Surveillance System.
 ## 🌐 Base URL
 
 - **Development**: `http://localhost:8000`
-- **Production**: `https://your-domain.com`
+- **Production**: `https://intelligent-surveillance.streamlit.app/`
 
 ## 📖 API Overview
 
