@@ -13,16 +13,46 @@ import logging
 logger = logging.getLogger(__name__)
 
 class QueryController(BaseController):
-    def __init__(self, project_id: str = None):
-        """Initialize query controller with vector database connection"""
+    def __init__(self, project_id: str = None, vector_controller: VectorDBController = None):
+        """Initialize query controller with vector database connection
+        
+        Args:
+            project_id (str): Default project ID for filtering (optional)
+            vector_controller (VectorDBController): Pre-initialized vector controller
+                If None, creates a new one (for backward compatibility)
+        """
         super().__init__()
 
         # Handle None or empty project_id
         if not project_id:
             project_id = "default"
         
-        self.collection_name = f'surveillance_{project_id}'
-        self.vector_db = VectorDBController(collection_name=self.collection_name)
+        self.project_id = project_id
+        
+        # Use provided vector controller or create new one
+        if vector_controller is not None:
+            # Use the pre-initialized global vector controller
+            self.vector_db = vector_controller
+            logger.info(f"Using pre-initialized global vector controller for project {project_id}")
+            
+            # But we need to switch to the project-specific collection
+            if project_id and project_id != "default":
+                collection_name = f'surveillance_{project_id}'
+                try:
+                    # Switch to the project-specific collection
+                    import chromadb
+                    self.vector_db.collection = self.vector_db.client.get_collection(name=collection_name)
+                    logger.info(f"Switched to project collection: {collection_name}")
+                except Exception as e:
+                    logger.warning(f"Could not switch to collection {collection_name}: {e}")
+                    # Fall back to creating a new project-specific controller
+                    self.vector_db = VectorDBController(collection_name=collection_name)
+                    logger.info(f"Created new project-specific controller for {collection_name}")
+        else:
+            # Fallback: create project-specific controller (for backward compatibility)
+            self.collection_name = f'surveillance_{project_id}'
+            self.vector_db = VectorDBController(collection_name=self.collection_name)
+            logger.info(f"Created new project-specific vector controller for {project_id}")
         
     def process_query(self, query_text, max_results=10, project_id=None):
         """
@@ -32,21 +62,56 @@ class QueryController(BaseController):
             query_text (str): The natural language query
             max_results (int): Maximum number of results to return
             project_id (str, optional): Filter results to specific project
-            
+                If None, uses the default project_id from initialization
+                
         Returns:
             dict: Search results with matched frames and metadata
         """
-        # Analyze query for potential filters
-        filters = self.extract_filters_from_query(query_text, project_id)
+        # Use provided project_id or fall back to instance default
+        effective_project_id = project_id or self.project_id
         
-        # Search for relevant content
+        # DEBUG: Check what's in the vector database first
+        try:
+            total_count = self.vector_db.collection.count()
+            logger.info(f"🔍 Total documents in vector database: {total_count}")
+            
+            # Get a sample of documents to see what project_ids exist
+            sample_docs = self.vector_db.collection.get(limit=5, include=['metadatas'])
+            if sample_docs and sample_docs.get('metadatas'):
+                project_ids = [meta.get('project_id', 'unknown') for meta in sample_docs['metadatas']]
+                logger.info(f"🔍 Sample project_ids in database: {set(project_ids)}")
+            
+        except Exception as e:
+            logger.warning(f"Could not get database stats: {e}")
+        
+        # Analyze query for potential filters
+        filters = self.extract_filters_from_query(query_text, effective_project_id)
+        logger.info(f"🔍 Using filters: {filters}")
+        
+        # First try without filters to see if we get any results
+        search_results_no_filter = self.vector_db.semantic_search(
+            query=query_text, 
+            limit=max_results,
+            filter_criteria=None  # No filters
+        )
+        logger.info(f"🔍 Search results WITHOUT filters: {len(search_results_no_filter)} results")
+        
+        # Now try with filters
         search_results = self.vector_db.semantic_search(
             query=query_text, 
             limit=max_results,
             filter_criteria=filters
         )
         
-        logger.info(f"Search results for query: {search_results}")
+        logger.info(f"🔍 Search results WITH filters for query '{query_text}' in project '{effective_project_id}': {len(search_results)} results")
+        
+        # If filtered search returns no results, use unfiltered results but log the issue
+        if len(search_results) == 0 and len(search_results_no_filter) > 0:
+            logger.warning(f"🔍 Filtered search returned 0 results, but unfiltered returned {len(search_results_no_filter)}. Using unfiltered results.")
+            search_results = search_results_no_filter
+            # Update effective_project_id to indicate we're showing all projects
+            effective_project_id = "all_projects"
+        
         # Extract frame paths and timestamps
         processed_results = []
         for result in search_results:
@@ -85,7 +150,8 @@ class QueryController(BaseController):
         return {
             'query': query_text,
             'results': processed_results,
-            'total_results': len(processed_results)
+            'total_results': len(processed_results),
+            'project_id': effective_project_id
         }
         
     def extract_filters_from_query(self, query, project_id=None):
@@ -101,9 +167,9 @@ class QueryController(BaseController):
         """
         filters = {}
         
-        # Add project filter if specified
-        if project_id:
-            filters['project_id'] = project_id
+        # NOTE: Don't add project_id filter here since we're already in the correct collection
+        # The QueryController should be initialized with the right collection for the project
+        logger.info("🔍 Not adding project filter since we're in project-specific collection")
             
         # Extract time-based filters
         time_patterns = [

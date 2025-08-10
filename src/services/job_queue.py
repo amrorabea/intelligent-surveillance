@@ -12,7 +12,16 @@ logger = logging.getLogger(__name__)
 # Celery configuration with simplified backend
 def create_celery_app():
     # Use Redis as broker and backend (fallback to in-memory for development)
-    redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+    redis_url = os.getenv('REDIS_URL')
+    
+    # If REDIS_URL is not set, construct it from REDIS_HOST and REDIS_PORT
+    if not redis_url:
+        redis_host = os.getenv('REDIS_HOST', 'localhost')
+        redis_port = os.getenv('REDIS_PORT', '6379')
+        redis_db = os.getenv('REDIS_DB', '0')
+        redis_url = f'redis://{redis_host}:{redis_port}/{redis_db}'
+    
+    logger.info(f"Using Redis URL: {redis_url}")
     
     celery_app = Celery(
         'surveillance_worker',

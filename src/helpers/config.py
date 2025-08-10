@@ -23,6 +23,20 @@ class Settings(BaseSettings):
     # Project and file storage settings
     project_files_dir: str = "/home/amro/Desktop/intelligent-surveillance/src/assets/files"
 
+    # Redis settings for Celery
+    redis_host: str = "localhost"
+    redis_port: int = 6379
+    redis_db: int = 0
+    redis_url: str = "redis://localhost:6379/0"
+
+    # API settings
+    api_host: str = "0.0.0.0"
+    api_port: int = 5000
+
+    # Processing settings
+    max_workers: int = 2
+    batch_size: int = 4
+
     JWT_SECRET_KEY: str = '7jwklrMSIuJkQ2loH0e1mHhUEnN0Ighy5vDbPOmgxho'
 
     class Config:

@@ -1,10 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import logging
-import time
 from contextlib import asynccontextmanager
 
-from routes import base, data, surveillance
+from routes import base, data
+from routes import jobs_router, queries_router, frames_router, analytics_router, health_router
 from models.database import db_manager
 
 # Import AI controllers
@@ -63,10 +63,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routes
+# Include modular routes
 app.include_router(base.base_router)
 app.include_router(data.data_router)
-app.include_router(surveillance.surveillance_router)
+app.include_router(jobs_router)
+app.include_router(queries_router)
+app.include_router(frames_router)
+app.include_router(analytics_router)
+app.include_router(health_router)
 
 @app.get("/")
 async def root():
@@ -74,15 +78,7 @@ async def root():
     return {
         "message": "Intelligent Surveillance System",
         "docs": "/docs",
-        "health": "/health"
-    }
-
-@app.get("/health")
-async def health():
-    """Health check"""
-    return {
-        "status": "healthy",
-        "timestamp": time.time()
+        "health": "/api/surveillance/health"
     }
 
 if __name__ == "__main__":
